@@ -17,6 +17,7 @@ replica_lock = threading.Lock()
 replica_offsets = {}
 master_repl_offset = 0
 replica_ack_condition = threading.Condition(replica_lock)
+config = {b"dir": b"/tmp", b"dbfilename": b"dump.rdb"}
 master_replid = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40)).encode()
 
 
@@ -211,6 +212,10 @@ def handle_client(connection):
                     if role == b"master":
                         info += b"master_replid:" + master_replid + b"\r\nmaster_repl_offset:0\r\n"
                     connection.sendall(b"$" + str(len(info)).encode() + b"\r\n" + info + b"\r\n")
+                elif command_name == b"CONFIG" and len(command) >= 3 and command[1].upper() == b"GET":
+                    parameter = command[2].lower()
+                    value = config.get(parameter, b"")
+                    connection.sendall(b"*2\r\n$" + str(len(parameter)).encode() + b"\r\n" + parameter + b"\r\n$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n")
                 elif command_name == b"REPLCONF":
                     if len(command) >= 3 and command[1].upper() == b"ACK":
                         with replica_ack_condition:
@@ -432,6 +437,10 @@ def main():
     port = 6379
     role = b"master"
     replica_target = None
+    if "--dir" in sys.argv:
+        config[b"dir"] = sys.argv[sys.argv.index("--dir") + 1].encode()
+    if "--dbfilename" in sys.argv:
+        config[b"dbfilename"] = sys.argv[sys.argv.index("--dbfilename") + 1].encode()
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
     if "--replicaof" in sys.argv:
