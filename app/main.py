@@ -145,6 +145,11 @@ def handle_client(connection):
                     midpoint = len(remaining) // 2
                     keys = remaining[:midpoint]
                     ids = remaining[midpoint:]
+                    ids = [
+                        (streams[key][-1][0] if start_id == b"$" and streams.get(key) else b"0-0")
+                        if start_id == b"$" else start_id
+                        for key, start_id in zip(keys, ids)
+                    ]
                     streams_response = []
                     while True:
                         streams_response = []
