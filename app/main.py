@@ -70,6 +70,15 @@ def handle_client(connection):
                         connection.sendall(
                             b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n"
                         )
+                elif command_name == b"TYPE":
+                    key = command[1]
+                    if key in store:
+                        response = b"+string\r\n"
+                    elif key in lists:
+                        response = b"+list\r\n"
+                    else:
+                        response = b"+none\r\n"
+                    connection.sendall(response)
                 elif command_name == b"RPUSH":
                     with list_condition:
                         values = lists.setdefault(command[1], [])
