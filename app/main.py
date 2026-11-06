@@ -2,6 +2,8 @@ import socket  # noqa: F401
 import threading
 import time
 import sys
+import secrets
+import string
 from collections import defaultdict, deque
 
 store = {}
@@ -10,6 +12,7 @@ streams = {}
 list_condition = threading.Condition()
 blocked_clients = defaultdict(deque)
 key_versions = defaultdict(int)
+master_replid = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40)).encode()
 
 
 def parse_command(buffer):
@@ -186,7 +189,10 @@ def handle_client(connection):
                         response = b"+none\r\n"
                     connection.sendall(response)
                 elif command_name == b"INFO":
-                    info = b"role:" + globals().get("server_role", b"master") + b"\r\n"
+                    role = globals().get("server_role", b"master")
+                    info = b"role:" + role + b"\r\n"
+                    if role == b"master":
+                        info += b"master_replid:" + master_replid + b"\r\nmaster_repl_offset:0\r\n"
                     connection.sendall(b"$" + str(len(info)).encode() + b"\r\n" + info + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
