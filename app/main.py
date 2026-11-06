@@ -74,6 +74,10 @@ def handle_client(connection):
                 elif command_name == b"LRANGE":
                     values = lists.get(command[1], [])
                     start, stop = int(command[2]), int(command[3])
+                    if start < 0:
+                        start = max(0, len(values) + start)
+                    if stop < 0:
+                        stop = len(values) + stop
                     selected = values[start : stop + 1] if start <= stop else []
                     response = b"*" + str(len(selected)).encode() + b"\r\n"
                     for value in selected:
