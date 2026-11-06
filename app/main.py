@@ -477,6 +477,19 @@ def handle_client(connection):
                     connection.sendall(response)
                 elif command_name == b"ZCARD":
                     connection.sendall(b":" + str(len(sorted_sets.get(command[1], {}))).encode() + b"\r\n")
+                elif command_name == b"ZREM":
+                    members = sorted_sets.get(command[1], {})
+                    scores = sorted_set_score_strings.get(command[1], {})
+                    removed = 0
+                    for member in command[2:]:
+                        if member in members:
+                            del members[member]
+                            scores.pop(member, None)
+                            removed += 1
+                    if not members:
+                        sorted_sets.pop(command[1], None)
+                        sorted_set_score_strings.pop(command[1], None)
+                    connection.sendall(b":" + str(removed).encode() + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
