@@ -1,6 +1,8 @@
 import socket  # noqa: F401
 import threading
 
+store = {}
+
 
 def parse_command(buffer):
     if not buffer.startswith(b"*"):
@@ -41,11 +43,23 @@ def handle_client(connection):
             while parsed_command := parse_command(buffer):
                 command, consumed_bytes = parsed_command
                 buffer = buffer[consumed_bytes:]
-                if command[0].upper() == b"ECHO":
+                command_name = command[0].upper()
+                if command_name == b"ECHO":
                     argument = command[1]
                     connection.sendall(
                         b"$" + str(len(argument)).encode() + b"\r\n" + argument + b"\r\n"
                     )
+                elif command_name == b"SET":
+                    store[command[1]] = command[2]
+                    connection.sendall(b"+OK\r\n")
+                elif command_name == b"GET":
+                    value = store.get(command[1])
+                    if value is None:
+                        connection.sendall(b"$-1\r\n")
+                    else:
+                        connection.sendall(
+                            b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n"
+                        )
                 else:
                     connection.sendall(b"+PONG\r\n")
 

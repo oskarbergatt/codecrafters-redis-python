@@ -117,6 +117,31 @@ class RedisServerTests(unittest.TestCase):
             process.terminate()
             process.wait(timeout=5)
 
+    def test_sets_and_gets_a_value(self):
+        """Discarding SET values should make the later GET return the wrong response."""
+        process = subprocess.Popen(
+            ["./your_program.sh"],
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            for _ in range(30):
+                try:
+                    with socket.create_connection(("localhost", 6379), timeout=0.1) as client:
+                        client.sendall(b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n")
+                        self.assertEqual(client.recv(1024), b"+OK\r\n")
+                        client.sendall(b"*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n")
+                        self.assertEqual(client.recv(1024), b"$5\r\nvalue\r\n")
+                        return
+                except ConnectionRefusedError:
+                    time.sleep(0.1)
+
+            self.fail("Redis server did not accept a connection on port 6379")
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+
 
 if __name__ == "__main__":
     unittest.main()
