@@ -197,12 +197,18 @@ def handle_client(connection):
         transaction_queue = None
         watched_keys = set()
         watched_versions = {}
+        subscribed_channels = set()
         while data := connection.recv(1024):
             buffer += data
             while parsed_command := parse_command(buffer):
                 command, consumed_bytes = parsed_command
                 buffer = buffer[consumed_bytes:]
                 command_name = command[0].upper()
+                if command_name == b"SUBSCRIBE":
+                    for channel in command[1:]:
+                        subscribed_channels.add(channel)
+                        connection.sendall(b"*3\r\n$9\r\nsubscribe\r\n$" + str(len(channel)).encode() + b"\r\n" + channel + b"\r\n:" + str(len(subscribed_channels)).encode() + b"\r\n")
+                    continue
                 if command_name in (b"SET", b"INCR", b"DEL", b"RPUSH", b"LPUSH", b"LPOP", b"XADD"):
                     append_aof_command(command)
                 if command_name in (b"SET", b"INCR", b"RPUSH", b"LPUSH", b"LPOP", b"XADD"):
