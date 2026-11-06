@@ -412,7 +412,13 @@ def main():
         master_connection.recv(1024)
         master_connection.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
         master_connection.recv(1024)
-        master_connection.recv(4096)  # initial RDB snapshot
+        rdb_header = b""
+        while not rdb_header.endswith(b"\r\n"):
+            rdb_header += master_connection.recv(1)
+        rdb_length = int(rdb_header[1:-2])
+        rdb_payload = b""
+        while len(rdb_payload) < rdb_length:
+            rdb_payload += master_connection.recv(rdb_length - len(rdb_payload))
         threading.Thread(target=handle_replication_stream, args=(master_connection,), daemon=True).start()
     while True:
         connection, _ = server_socket.accept()
