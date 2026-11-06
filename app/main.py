@@ -209,7 +209,9 @@ def handle_client(connection):
                 elif command_name == b"REPLCONF":
                     connection.sendall(b"+OK\r\n")
                 elif command_name == b"WAIT":
-                    connection.sendall(b":0\r\n")
+                    with replica_lock:
+                        replica_count = len(replica_connections)
+                    connection.sendall(b":" + str(replica_count).encode() + b"\r\n")
                 elif command_name == b"PSYNC":
                     connection.sendall(b"+FULLRESYNC " + master_replid + b" 0\r\n")
                     empty_rdb = b"REDIS0011\xfe\x00\xff" + b"\x00" * 8
