@@ -75,6 +75,36 @@ def handle_client(connection):
                     transaction_queue = None
                     connection.sendall(b"*0\r\n")
                     continue
+                if command_name == b"EXEC" and transaction_queue is not None:
+                    queued = transaction_queue
+                    transaction_queue = None
+                    replies = []
+                    for queued_command in queued:
+                        queued_name = queued_command[0].upper()
+                        if queued_name == b"SET":
+                            store[queued_command[1]] = (queued_command[2], None)
+                            replies.append(b"+OK\r\n")
+                        elif queued_name == b"INCR":
+                            key = queued_command[1]
+                            entry = store.get(key)
+                            try:
+                                number = 0 if entry is None else int(entry[0])
+                                number += 1
+                                store[key] = (str(number).encode(), None)
+                                replies.append(b":" + str(number).encode() + b"\r\n")
+                            except ValueError:
+                                replies.append(b"-ERR value is not an integer or out of range\r\n")
+                        elif queued_name == b"GET":
+                            entry = store.get(queued_command[1])
+                            if entry is None:
+                                replies.append(b"$-1\r\n")
+                            else:
+                                value = entry[0]
+                                replies.append(b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n")
+                        else:
+                            replies.append(b"+PONG\r\n")
+                    connection.sendall(b"*" + str(len(replies)).encode() + b"\r\n" + b"".join(replies))
+                    continue
                 if command_name == b"ECHO":
                     argument = command[1]
                     connection.sendall(
