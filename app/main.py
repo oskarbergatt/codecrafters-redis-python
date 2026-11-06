@@ -100,16 +100,24 @@ def handle_client(connection):
                         connection.sendall(b"$-1\r\n")
                 elif command_name == b"BLPOP":
                     key = command[1]
+                    timeout = float(command[2]) if len(command) > 2 else 0
+                    deadline = time.monotonic() + timeout if timeout else None
                     with list_condition:
                         blocked_clients[key].append(threading.current_thread())
                         while not lists.get(key):
-                            list_condition.wait()
-                        blocked_clients[key].popleft()
-                        value = lists[key].pop(0)
-                    response = b"*2\r\n"
-                    for item in (key, value):
-                        response += b"$" + str(len(item)).encode() + b"\r\n" + item + b"\r\n"
-                    connection.sendall(response)
+                            remaining = None if deadline is None else deadline - time.monotonic()
+                            if remaining is not None and remaining <= 0:
+                                blocked_clients[key].remove(threading.current_thread())
+                                connection.sendall(b"*-1\r\n")
+                                break
+                            list_condition.wait(remaining)
+                        else:
+                            blocked_clients[key].popleft()
+                            value = lists[key].pop(0)
+                            response = b"*2\r\n"
+                            for item in (key, value):
+                                response += b"$" + str(len(item)).encode() + b"\r\n" + item + b"\r\n"
+                            connection.sendall(response)
                 elif command_name == b"LRANGE":
                     values = lists.get(command[1], [])
                     start, stop = int(command[2]), int(command[3])
