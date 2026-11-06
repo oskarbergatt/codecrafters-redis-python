@@ -362,6 +362,12 @@ def main():
         master_host, master_port = replica_target
         with socket.create_connection((master_host, int(master_port))) as master_connection:
             master_connection.sendall(b"*1\r\n$4\r\nPING\r\n")
+            master_connection.recv(1024)
+            port_value = str(port).encode()
+            master_connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$" + str(len(port_value)).encode() + b"\r\n" + port_value + b"\r\n")
+            master_connection.recv(1024)
+            master_connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
+            master_connection.recv(1024)
     while True:
         connection, _ = server_socket.accept()
         threading.Thread(target=handle_client, args=(connection,), daemon=True).start()
