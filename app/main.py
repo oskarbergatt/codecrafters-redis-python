@@ -366,6 +366,28 @@ def handle_client(connection):
                     connection.sendall(b"+PONG\r\n")
 
 
+def handle_replication_stream(connection):
+    buffer = b""
+    while data := connection.recv(4096):
+        buffer += data
+        while parsed := parse_command(buffer):
+            command, consumed = parsed
+            buffer = buffer[consumed:]
+            name = command[0].upper()
+            if name == b"SET" and len(command) >= 3:
+                store[command[1]] = (command[2], None)
+                key_versions[command[1]] += 1
+            elif name == b"DEL":
+                for key in command[1:]:
+                    store.pop(key, None)
+                    key_versions[key] += 1
+            elif name == b"INCR" and len(command) > 1:
+                key = command[1]
+                current = int(store[key][0]) if key in store else 0
+                store[key] = (str(current + 1).encode(), None)
+                key_versions[key] += 1
+
+
 def main():
     port = 6379
     role = b"master"
@@ -380,16 +402,18 @@ def main():
     server_socket = socket.create_server(("localhost", port), reuse_port=True)
     if replica_target:
         master_host, master_port = replica_target
-        with socket.create_connection((master_host, int(master_port))) as master_connection:
-            master_connection.sendall(b"*1\r\n$4\r\nPING\r\n")
-            master_connection.recv(1024)
-            port_value = str(port).encode()
-            master_connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$" + str(len(port_value)).encode() + b"\r\n" + port_value + b"\r\n")
-            master_connection.recv(1024)
-            master_connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
-            master_connection.recv(1024)
-            master_connection.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
-            master_connection.recv(1024)
+        master_connection = socket.create_connection((master_host, int(master_port)))
+        master_connection.sendall(b"*1\r\n$4\r\nPING\r\n")
+        master_connection.recv(1024)
+        port_value = str(port).encode()
+        master_connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$" + str(len(port_value)).encode() + b"\r\n" + port_value + b"\r\n")
+        master_connection.recv(1024)
+        master_connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
+        master_connection.recv(1024)
+        master_connection.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
+        master_connection.recv(1024)
+        master_connection.recv(4096)  # initial RDB snapshot
+        threading.Thread(target=handle_replication_stream, args=(master_connection,), daemon=True).start()
     while True:
         connection, _ = server_socket.accept()
         threading.Thread(target=handle_client, args=(connection,), daemon=True).start()
