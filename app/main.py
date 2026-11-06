@@ -2,6 +2,7 @@ import socket  # noqa: F401
 import threading
 import time
 import sys
+import os
 import secrets
 import string
 from collections import defaultdict, deque
@@ -17,7 +18,7 @@ replica_lock = threading.Lock()
 replica_offsets = {}
 master_repl_offset = 0
 replica_ack_condition = threading.Condition(replica_lock)
-config = {b"dir": b"/tmp", b"dbfilename": b"dump.rdb"}
+config = {b"dir": os.getcwd().encode(), b"dbfilename": b"dump.rdb", b"appendonly": b"no", b"appenddirname": b"appendonlydir", b"appendfilename": b"appendonly.aof", b"appendfsync": b"everysec"}
 master_replid = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40)).encode()
 
 
