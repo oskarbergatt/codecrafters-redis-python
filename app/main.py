@@ -79,6 +79,11 @@ def handle_client(connection):
                     watched_versions.update({key: key_versions[key] for key in command[1:]})
                     connection.sendall(b"+OK\r\n")
                     continue
+                if command_name == b"UNWATCH":
+                    watched_keys.clear()
+                    watched_versions.clear()
+                    connection.sendall(b"+OK\r\n")
+                    continue
                 if command_name == b"EXEC" and transaction_queue is None:
                     connection.sendall(b"-ERR EXEC without MULTI\r\n")
                     continue
