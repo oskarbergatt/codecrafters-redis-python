@@ -132,6 +132,9 @@ def handle_client(connection):
                                 response += b"$" + str(len(item)).encode() + b"\r\n" + item + b"\r\n"
                     connection.sendall(response)
                 elif command_name == b"XREAD":
+                    block_index = next((index for index, part in enumerate(command) if part.upper() == b"BLOCK"), None)
+                    block_timeout = int(command[block_index + 1]) / 1000 if block_index is not None else None
+                    deadline = time.monotonic() + block_timeout if block_timeout else None
                     marker = next((index for index, part in enumerate(command) if part.upper() == b"STREAMS"), None)
                     if marker is None or len(command) < marker + 3:
                         connection.sendall(b"*-1\r\n")
@@ -141,18 +144,30 @@ def handle_client(connection):
                     keys = remaining[:midpoint]
                     ids = remaining[midpoint:]
                     streams_response = []
-                    for key, start_id in zip(keys, ids):
-                        after = stream_id_tuple(start_id)
-                        entries = [(entry_id, fields) for entry_id, fields in streams.get(key, []) if stream_id_tuple(entry_id) > after]
-                        if entries:
-                            entry_bytes = b"*" + str(len(entries)).encode() + b"\r\n"
-                            for entry_id, fields in entries:
-                                entry_bytes += b"*2\r\n$" + str(len(entry_id)).encode() + b"\r\n" + entry_id + b"\r\n"
-                                flattened = [part for pair in fields for part in pair]
-                                entry_bytes += b"*" + str(len(flattened)).encode() + b"\r\n"
-                                for part in flattened:
-                                    entry_bytes += b"$" + str(len(part)).encode() + b"\r\n" + part + b"\r\n"
-                            streams_response.append((key, entry_bytes))
+                    while True:
+                        streams_response = []
+                        for key, start_id in zip(keys, ids):
+                            after = stream_id_tuple(start_id)
+                            entries = [(entry_id, fields) for entry_id, fields in streams.get(key, []) if stream_id_tuple(entry_id) > after]
+                            if entries:
+                                entry_bytes = b"*" + str(len(entries)).encode() + b"\r\n"
+                                for entry_id, fields in entries:
+                                    entry_bytes += b"*2\r\n$" + str(len(entry_id)).encode() + b"\r\n" + entry_id + b"\r\n"
+                                    flattened = [part for pair in fields for part in pair]
+                                    entry_bytes += b"*" + str(len(flattened)).encode() + b"\r\n"
+                                    for part in flattened:
+                                        entry_bytes += b"$" + str(len(part)).encode() + b"\r\n" + part + b"\r\n"
+                                streams_response.append((key, entry_bytes))
+                        if streams_response or block_index is None:
+                            break
+                        remaining_time = None if deadline is None else deadline - time.monotonic()
+                        if remaining_time is not None and remaining_time <= 0:
+                            break
+                        with list_condition:
+                            list_condition.wait(remaining_time)
+                    if not streams_response:
+                        connection.sendall(b"*-1\r\n" if block_index is not None else b"*0\r\n")
+                        continue
                     response = b"*" + str(len(streams_response)).encode() + b"\r\n"
                     for key, entries in streams_response:
                         response += b"*2\r\n$" + str(len(key)).encode() + b"\r\n" + key + b"\r\n" + entries
