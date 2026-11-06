@@ -71,6 +71,10 @@ def handle_client(connection):
                     values = lists.setdefault(command[1], [])
                     values.extend(command[2:])
                     connection.sendall(b":" + str(len(values)).encode() + b"\r\n")
+                elif command_name == b"LPUSH":
+                    values = lists.setdefault(command[1], [])
+                    values[0:0] = reversed(command[2:])
+                    connection.sendall(b":" + str(len(values)).encode() + b"\r\n")
                 elif command_name == b"LRANGE":
                     values = lists.get(command[1], [])
                     start, stop = int(command[2]), int(command[3])
