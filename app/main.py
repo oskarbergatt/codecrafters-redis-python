@@ -232,9 +232,9 @@ def handle_client(connection):
                 if subscribed_channels and command_name == b"QUIT":
                     connection.sendall(b"+OK\r\n")
                     return
-                if command_name in (b"SET", b"INCR", b"DEL", b"RPUSH", b"LPUSH", b"LPOP", b"XADD", b"ZADD"):
+                if command_name in (b"SET", b"INCR", b"DEL", b"RPUSH", b"LPUSH", b"LPOP", b"XADD", b"ZADD", b"SETBIT"):
                     append_aof_command(command)
-                if command_name in (b"SET", b"INCR", b"RPUSH", b"LPUSH", b"LPOP", b"XADD", b"ZADD"):
+                if command_name in (b"SET", b"INCR", b"RPUSH", b"LPUSH", b"LPOP", b"XADD", b"ZADD", b"SETBIT"):
                     encoded_command = b"*" + str(len(command)).encode() + b"\r\n"
                     for argument in command:
                         encoded_command += b"$" + str(len(argument)).encode() + b"\r\n" + argument + b"\r\n"
@@ -490,6 +490,25 @@ def handle_client(connection):
                         sorted_sets.pop(command[1], None)
                         sorted_set_score_strings.pop(command[1], None)
                     connection.sendall(b":" + str(removed).encode() + b"\r\n")
+                elif command_name == b"SETBIT":
+                    key, offset, bit = command[1], int(command[2]), int(command[3])
+                    if bit not in (0, 1):
+                        connection.sendall(b"-ERR bit is not an integer or out of range\r\n")
+                        continue
+                    existing = store.get(key)
+                    value = bytearray(existing[0] if existing else b"")
+                    byte_index = offset // 8
+                    if len(value) <= byte_index:
+                        value.extend(b"\x00" * (byte_index + 1 - len(value)))
+                    mask = 1 << (7 - offset % 8)
+                    previous = 1 if value[byte_index] & mask else 0
+                    if bit:
+                        value[byte_index] |= mask
+                    else:
+                        value[byte_index] &= ~mask
+                    store[key] = (bytes(value), None)
+                    key_versions[key] += 1
+                    connection.sendall(b":" + str(previous).encode() + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
