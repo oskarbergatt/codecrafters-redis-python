@@ -69,7 +69,7 @@ def handle_client(connection):
                         )
                 elif command_name == b"RPUSH":
                     values = lists.setdefault(command[1], [])
-                    values.append(command[2])
+                    values.extend(command[2:])
                     connection.sendall(b":" + str(len(values)).encode() + b"\r\n")
                 else:
                     connection.sendall(b"+PONG\r\n")
