@@ -1,9 +1,12 @@
 import socket  # noqa: F401
 import threading
 import time
+from collections import defaultdict, deque
 
 store = {}
 lists = {}
+list_condition = threading.Condition()
+blocked_clients = defaultdict(deque)
 
 
 def parse_command(buffer):
@@ -68,9 +71,12 @@ def handle_client(connection):
                             b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n"
                         )
                 elif command_name == b"RPUSH":
-                    values = lists.setdefault(command[1], [])
-                    values.extend(command[2:])
-                    connection.sendall(b":" + str(len(values)).encode() + b"\r\n")
+                    with list_condition:
+                        values = lists.setdefault(command[1], [])
+                        values.extend(command[2:])
+                        list_condition.notify_all()
+                        size = len(values)
+                    connection.sendall(b":" + str(size).encode() + b"\r\n")
                 elif command_name == b"LPUSH":
                     values = lists.setdefault(command[1], [])
                     values[0:0] = reversed(command[2:])
@@ -92,6 +98,18 @@ def handle_client(connection):
                         connection.sendall(b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n")
                     else:
                         connection.sendall(b"$-1\r\n")
+                elif command_name == b"BLPOP":
+                    key = command[1]
+                    with list_condition:
+                        blocked_clients[key].append(threading.current_thread())
+                        while not lists.get(key):
+                            list_condition.wait()
+                        blocked_clients[key].popleft()
+                        value = lists[key].pop(0)
+                    response = b"*2\r\n"
+                    for item in (key, value):
+                        response += b"$" + str(len(item)).encode() + b"\r\n" + item + b"\r\n"
+                    connection.sendall(response)
                 elif command_name == b"LRANGE":
                     values = lists.get(command[1], [])
                     start, stop = int(command[2]), int(command[3])
