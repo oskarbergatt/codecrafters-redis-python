@@ -1,5 +1,6 @@
 import socket  # noqa: F401
 import threading
+import time
 
 store = {}
 
@@ -50,13 +51,18 @@ def handle_client(connection):
                         b"$" + str(len(argument)).encode() + b"\r\n" + argument + b"\r\n"
                     )
                 elif command_name == b"SET":
-                    store[command[1]] = command[2]
+                    expiry = None
+                    if len(command) >= 5 and command[3].upper() == b"PX":
+                        expiry = time.monotonic() + int(command[4]) / 1000
+                    store[command[1]] = (command[2], expiry)
                     connection.sendall(b"+OK\r\n")
                 elif command_name == b"GET":
-                    value = store.get(command[1])
-                    if value is None:
+                    entry = store.get(command[1])
+                    if entry is None or (entry[1] is not None and time.monotonic() >= entry[1]):
+                        store.pop(command[1], None)
                         connection.sendall(b"$-1\r\n")
                     else:
+                        value = entry[0]
                         connection.sendall(
                             b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n"
                         )
