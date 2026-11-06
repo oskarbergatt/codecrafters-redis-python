@@ -70,6 +70,13 @@ def handle_client(connection):
                         expiry = time.monotonic() + int(command[4]) / 1000
                     store[command[1]] = (command[2], expiry)
                     connection.sendall(b"+OK\r\n")
+                elif command_name == b"INCR":
+                    key = command[1]
+                    entry = store.get(key)
+                    current = 0 if entry is None else int(entry[0])
+                    current += 1
+                    store[key] = (str(current).encode(), None)
+                    connection.sendall(b":" + str(current).encode() + b"\r\n")
                 elif command_name == b"GET":
                     entry = store.get(command[1])
                     if entry is None or (entry[1] is not None and time.monotonic() >= entry[1]):
