@@ -368,6 +368,7 @@ def handle_client(connection):
 
 def handle_replication_stream(connection):
     buffer = b""
+    replication_offset = 0
     while data := connection.recv(4096):
         buffer += data
         while parsed := parse_command(buffer):
@@ -375,7 +376,8 @@ def handle_replication_stream(connection):
             buffer = buffer[consumed:]
             name = command[0].upper()
             if name == b"REPLCONF" and len(command) >= 2 and command[1].upper() == b"GETACK":
-                connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n")
+                offset = str(replication_offset).encode()
+                connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$" + str(len(offset)).encode() + b"\r\n" + offset + b"\r\n")
             elif name == b"SET" and len(command) >= 3:
                 store[command[1]] = (command[2], None)
                 key_versions[command[1]] += 1
@@ -388,6 +390,7 @@ def handle_replication_stream(connection):
                 current = int(store[key][0]) if key in store else 0
                 store[key] = (str(current + 1).encode(), None)
                 key_versions[key] += 1
+            replication_offset += consumed
 
 
 def main():
