@@ -114,6 +114,10 @@ def handle_client(connection):
                 elif command_name == b"XRANGE":
                     key, start_id, end_id = command[1:4]
                     def id_tuple(value):
+                        if value == b"-":
+                            return -1, -1
+                        if value == b"+":
+                            return float("inf"), float("inf")
                         parts = value.split(b"-", 1)
                         return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
                     selected = [(entry_id, fields) for entry_id, fields in streams.get(key, []) if id_tuple(start_id) <= id_tuple(entry_id) <= id_tuple(end_id)]
