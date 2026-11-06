@@ -111,6 +111,20 @@ def handle_client(connection):
                     fields = list(zip(command[3::2], command[4::2]))
                     streams.setdefault(key, []).append((entry_id, fields))
                     connection.sendall(b"$" + str(len(entry_id)).encode() + b"\r\n" + entry_id + b"\r\n")
+                elif command_name == b"XRANGE":
+                    key, start_id, end_id = command[1:4]
+                    def id_tuple(value):
+                        parts = value.split(b"-", 1)
+                        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+                    selected = [(entry_id, fields) for entry_id, fields in streams.get(key, []) if id_tuple(start_id) <= id_tuple(entry_id) <= id_tuple(end_id)]
+                    response = b"*" + str(len(selected)).encode() + b"\r\n"
+                    for entry_id, fields in selected:
+                        response += b"*2\r\n$" + str(len(entry_id)).encode() + b"\r\n" + entry_id
+                        response += b"\r\n*" + str(len(fields) * 2).encode() + b"\r\n"
+                        for field, value in fields:
+                            for item in (field, value):
+                                response += b"$" + str(len(item)).encode() + b"\r\n" + item + b"\r\n"
+                    connection.sendall(response)
                 elif command_name == b"RPUSH":
                     with list_condition:
                         values = lists.setdefault(command[1], [])
