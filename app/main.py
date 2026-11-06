@@ -18,6 +18,8 @@ replica_lock = threading.Lock()
 replica_offsets = {}
 master_repl_offset = 0
 replica_ack_condition = threading.Condition(replica_lock)
+channel_subscribers = defaultdict(set)
+subscriber_lock = threading.Lock()
 config = {b"dir": os.getcwd().encode(), b"dbfilename": b"dump.rdb", b"appendonly": b"no", b"appenddirname": b"appendonlydir", b"appendfilename": b"appendonly.aof", b"appendfsync": b"everysec"}
 master_replid = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40)).encode()
 
@@ -207,6 +209,8 @@ def handle_client(connection):
                 if command_name == b"SUBSCRIBE":
                     for channel in command[1:]:
                         subscribed_channels.add(channel)
+                        with subscriber_lock:
+                            channel_subscribers[channel].add(connection)
                         connection.sendall(b"*3\r\n$9\r\nsubscribe\r\n$" + str(len(channel)).encode() + b"\r\n" + channel + b"\r\n:" + str(len(subscribed_channels)).encode() + b"\r\n")
                     continue
                 if subscribed_channels and command_name not in (b"SUBSCRIBE", b"UNSUBSCRIBE", b"PSUBSCRIBE", b"PUNSUBSCRIBE", b"PING", b"QUIT", b"RESET"):
@@ -307,7 +311,20 @@ def handle_client(connection):
                             replies.append(b"+PONG\r\n")
                     connection.sendall(b"*" + str(len(replies)).encode() + b"\r\n" + b"".join(replies))
                     continue
-                if command_name == b"ECHO":
+                if command_name == b"PUBLISH":
+                    channel, message = command[1], command[2]
+                    delivered = 0
+                    with subscriber_lock:
+                        recipients = list(channel_subscribers.get(channel, set()))
+                        for recipient in recipients:
+                            payload = b"*3\r\n$7\r\nmessage\r\n$" + str(len(channel)).encode() + b"\r\n" + channel + b"\r\n$" + str(len(message)).encode() + b"\r\n" + message + b"\r\n"
+                            try:
+                                recipient.sendall(payload)
+                                delivered += 1
+                            except OSError:
+                                channel_subscribers[channel].discard(recipient)
+                    connection.sendall(b":" + str(delivered).encode() + b"\r\n")
+                elif command_name == b"ECHO":
                     argument = command[1]
                     connection.sendall(
                         b"$" + str(len(argument)).encode() + b"\r\n" + argument + b"\r\n"
