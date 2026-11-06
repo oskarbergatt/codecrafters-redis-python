@@ -84,6 +84,12 @@ def handle_client(connection):
                     connection.sendall(response)
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
+                    if entry_id == b"*":
+                        time_part = str(int(time.time() * 1000)).encode()
+                        prior = streams.get(key, [])
+                        same_time = [int(item_id.split(b"-", 1)[1]) for item_id, _ in prior if item_id.split(b"-", 1)[0] == time_part]
+                        sequence = max(same_time) + 1 if same_time else 0
+                        entry_id = time_part + b"-" + str(sequence).encode()
                     if entry_id.endswith(b"-*"):
                         time_part = entry_id[:-2]
                         prior = streams.get(key, [])
