@@ -416,7 +416,9 @@ def main():
         master_connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
         master_connection.recv(1024)
         master_connection.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
-        master_connection.recv(1024)
+        fullresync_line = b""
+        while not fullresync_line.endswith(b"\r\n"):
+            fullresync_line += master_connection.recv(1)
         rdb_header = b""
         while not rdb_header.endswith(b"\r\n"):
             rdb_header += master_connection.recv(1)
