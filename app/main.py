@@ -509,6 +509,13 @@ def handle_client(connection):
                     store[key] = (bytes(value), None)
                     key_versions[key] += 1
                     connection.sendall(b":" + str(previous).encode() + b"\r\n")
+                elif command_name == b"GETBIT":
+                    key, offset = command[1], int(command[2])
+                    entry = store.get(key)
+                    value = entry[0] if entry else b""
+                    byte_index = offset // 8
+                    bit = ((value[byte_index] >> (7 - offset % 8)) & 1) if byte_index < len(value) else 0
+                    connection.sendall(b":" + str(bit).encode() + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
