@@ -53,12 +53,21 @@ def stream_id_tuple(value):
 def handle_client(connection):
     with connection:
         buffer = b""
+        transaction_queue = None
         while data := connection.recv(1024):
             buffer += data
             while parsed_command := parse_command(buffer):
                 command, consumed_bytes = parsed_command
                 buffer = buffer[consumed_bytes:]
                 command_name = command[0].upper()
+                if transaction_queue is not None and command_name not in (b"EXEC", b"DISCARD", b"MULTI"):
+                    transaction_queue.append(command)
+                    connection.sendall(b"+QUEUED\r\n")
+                    continue
+                if command_name == b"MULTI":
+                    transaction_queue = []
+                    connection.sendall(b"+OK\r\n")
+                    continue
                 if command_name == b"ECHO":
                     argument = command[1]
                     connection.sendall(
