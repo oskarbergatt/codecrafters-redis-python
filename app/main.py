@@ -524,7 +524,10 @@ def main():
         if flag in sys.argv:
             config[option] = sys.argv[sys.argv.index(flag) + 1].encode()
     if config[b"appendonly"].lower() == b"yes":
-        os.makedirs(os.path.join(config[b"dir"].decode(), config[b"appenddirname"].decode()), exist_ok=True)
+        aof_directory = os.path.join(config[b"dir"].decode(), config[b"appenddirname"].decode())
+        os.makedirs(aof_directory, exist_ok=True)
+        incremental_aof = config[b"appendfilename"].decode() + ".1.incr.aof"
+        open(os.path.join(aof_directory, incremental_aof), "ab").close()
     load_rdb_file()
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
