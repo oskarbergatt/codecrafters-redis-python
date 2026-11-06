@@ -198,6 +198,7 @@ def handle_client(connection):
                     connection.sendall(b"+OK\r\n")
                 elif command_name == b"PSYNC":
                     connection.sendall(b"+FULLRESYNC " + master_replid + b" 0\r\n")
+                    connection.sendall(b"$0\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
