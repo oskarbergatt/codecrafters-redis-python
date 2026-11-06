@@ -368,6 +368,8 @@ def main():
             master_connection.recv(1024)
             master_connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
             master_connection.recv(1024)
+            master_connection.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
+            master_connection.recv(1024)
     while True:
         connection, _ = server_socket.accept()
         threading.Thread(target=handle_client, args=(connection,), daemon=True).start()
