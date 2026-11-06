@@ -73,7 +73,11 @@ def handle_client(connection):
                 elif command_name == b"INCR":
                     key = command[1]
                     entry = store.get(key)
-                    current = 0 if entry is None else int(entry[0])
+                    try:
+                        current = 0 if entry is None else int(entry[0])
+                    except ValueError:
+                        connection.sendall(b"-ERR value is not an integer or out of range\r\n")
+                        continue
                     current += 1
                     store[key] = (str(current).encode(), None)
                     connection.sendall(b":" + str(current).encode() + b"\r\n")
