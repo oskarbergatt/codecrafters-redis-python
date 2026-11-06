@@ -11,6 +11,7 @@ store = {}
 lists = {}
 streams = {}
 sorted_sets = {}
+sorted_set_score_strings = {}
 list_condition = threading.Condition()
 blocked_clients = defaultdict(deque)
 key_versions = defaultdict(int)
@@ -436,13 +437,23 @@ def handle_client(connection):
                 elif command_name == b"ZADD":
                     key = command[1]
                     members = sorted_sets.setdefault(key, {})
+                    score_strings = sorted_set_score_strings.setdefault(key, {})
                     added = 0
                     for index in range(2, len(command), 2):
-                        score, member = float(command[index]), command[index + 1]
+                        score_text, member = command[index], command[index + 1]
+                        score = float(score_text)
                         if member not in members:
                             added += 1
                         members[member] = score
+                        score_strings[member] = score_text
                     connection.sendall(b":" + str(added).encode() + b"\r\n")
+                elif command_name == b"ZSCORE":
+                    scores = sorted_set_score_strings.get(command[1], {})
+                    score = scores.get(command[2])
+                    if score is None:
+                        connection.sendall(b"$-1\r\n")
+                    else:
+                        connection.sendall(b"$" + str(len(score)).encode() + b"\r\n" + score + b"\r\n")
                 elif command_name == b"ZRANK":
                     members = sorted_sets.get(command[1])
                     member = command[2]
