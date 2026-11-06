@@ -8,6 +8,7 @@ lists = {}
 streams = {}
 list_condition = threading.Condition()
 blocked_clients = defaultdict(deque)
+key_versions = defaultdict(int)
 
 
 def parse_command(buffer):
@@ -55,6 +56,7 @@ def handle_client(connection):
         buffer = b""
         transaction_queue = None
         watched_keys = set()
+        watched_versions = {}
         while data := connection.recv(1024):
             buffer += data
             while parsed_command := parse_command(buffer):
@@ -74,6 +76,7 @@ def handle_client(connection):
                         connection.sendall(b"-ERR WATCH inside MULTI is not allowed\r\n")
                         continue
                     watched_keys.update(command[1:])
+                    watched_versions.update({key: key_versions[key] for key in command[1:]})
                     connection.sendall(b"+OK\r\n")
                     continue
                 if command_name == b"EXEC" and transaction_queue is None:
@@ -93,11 +96,19 @@ def handle_client(connection):
                 if command_name == b"EXEC" and transaction_queue is not None:
                     queued = transaction_queue
                     transaction_queue = None
+                    if any(key_versions[key] != watched_versions.get(key, key_versions[key]) for key in watched_keys):
+                        watched_keys.clear()
+                        watched_versions.clear()
+                        connection.sendall(b"*-1\r\n")
+                        continue
+                    watched_keys.clear()
+                    watched_versions.clear()
                     replies = []
                     for queued_command in queued:
                         queued_name = queued_command[0].upper()
                         if queued_name == b"SET":
                             store[queued_command[1]] = (queued_command[2], None)
+                            key_versions[queued_command[1]] += 1
                             replies.append(b"+OK\r\n")
                         elif queued_name == b"INCR":
                             key = queued_command[1]
@@ -106,6 +117,7 @@ def handle_client(connection):
                                 number = 0 if entry is None else int(entry[0])
                                 number += 1
                                 store[key] = (str(number).encode(), None)
+                                key_versions[key] += 1
                                 replies.append(b":" + str(number).encode() + b"\r\n")
                             except ValueError:
                                 replies.append(b"-ERR value is not an integer or out of range\r\n")
@@ -130,6 +142,7 @@ def handle_client(connection):
                     if len(command) >= 5 and command[3].upper() == b"PX":
                         expiry = time.monotonic() + int(command[4]) / 1000
                     store[command[1]] = (command[2], expiry)
+                    key_versions[command[1]] += 1
                     connection.sendall(b"+OK\r\n")
                 elif command_name == b"INCR":
                     key = command[1]
@@ -141,6 +154,7 @@ def handle_client(connection):
                         continue
                     current += 1
                     store[key] = (str(current).encode(), None)
+                    key_versions[key] += 1
                     connection.sendall(b":" + str(current).encode() + b"\r\n")
                 elif command_name == b"GET":
                     entry = store.get(command[1])
