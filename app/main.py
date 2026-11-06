@@ -136,8 +136,10 @@ def handle_client(connection):
                     if marker is None or len(command) < marker + 3:
                         connection.sendall(b"*-1\r\n")
                         continue
-                    keys = command[marker + 1 : marker + 2]
-                    ids = command[marker + 2 : marker + 3]
+                    remaining = command[marker + 1 :]
+                    midpoint = len(remaining) // 2
+                    keys = remaining[:midpoint]
+                    ids = remaining[midpoint:]
                     streams_response = []
                     for key, start_id in zip(keys, ids):
                         after = stream_id_tuple(start_id)
