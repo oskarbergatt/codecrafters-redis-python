@@ -16,6 +16,7 @@ replica_connections = []
 replica_lock = threading.Lock()
 replica_offsets = {}
 master_repl_offset = 0
+replica_ack_condition = threading.Condition(replica_lock)
 master_replid = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40)).encode()
 
 
@@ -211,7 +212,13 @@ def handle_client(connection):
                         info += b"master_replid:" + master_replid + b"\r\nmaster_repl_offset:0\r\n"
                     connection.sendall(b"$" + str(len(info)).encode() + b"\r\n" + info + b"\r\n")
                 elif command_name == b"REPLCONF":
-                    connection.sendall(b"+OK\r\n")
+                    if len(command) >= 3 and command[1].upper() == b"ACK":
+                        with replica_ack_condition:
+                            if connection in replica_connections:
+                                replica_offsets[connection] = int(command[2])
+                                replica_ack_condition.notify_all()
+                    else:
+                        connection.sendall(b"+OK\r\n")
                 elif command_name == b"WAIT":
                     requested = int(command[1]) if len(command) > 1 else 0
                     timeout_seconds = max(0, int(command[2])) / 1000 if len(command) > 2 else 0
@@ -227,30 +234,12 @@ def handle_client(connection):
                                     replica_connections.remove(replica_connection)
                                     replica_offsets.pop(replica_connection, None)
                     deadline = time.monotonic() + timeout_seconds
-                    for replica_connection in current_replicas:
-                        remaining = max(0, deadline - time.monotonic())
-                        if remaining == 0 and timeout_seconds > 0:
-                            break
-                        try:
-                            replica_connection.settimeout(remaining if timeout_seconds > 0 else 0.25)
-                            response = b""
-                            while not parse_command(response):
-                                chunk = replica_connection.recv(1)
-                                if not chunk:
-                                    break
-                                response += chunk
-                            parsed_ack = parse_command(response)
-                            if parsed_ack and len(parsed_ack[0]) >= 3 and parsed_ack[0][0].upper() == b"REPLCONF" and parsed_ack[0][1].upper() == b"ACK":
-                                with replica_lock:
-                                    replica_offsets[replica_connection] = int(parsed_ack[0][2])
-                        except (OSError, ValueError):
-                            pass
-                        finally:
-                            try:
-                                replica_connection.settimeout(None)
-                            except OSError:
-                                pass
-                    with replica_lock:
+                    with replica_ack_condition:
+                        while True:
+                            replica_count = sum(replica_offsets.get(replica_connection, 0) >= target_offset for replica_connection in replica_connections)
+                            if replica_count >= requested or time.monotonic() >= deadline:
+                                break
+                            replica_ack_condition.wait(max(0, deadline - time.monotonic()))
                         replica_count = sum(replica_offsets.get(replica_connection, 0) >= target_offset for replica_connection in replica_connections)
                     connection.sendall(b":" + str(replica_count).encode() + b"\r\n")
                 elif command_name == b"PSYNC":
