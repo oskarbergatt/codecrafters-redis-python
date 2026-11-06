@@ -61,7 +61,7 @@ def handle_client(connection):
                 command, consumed_bytes = parsed_command
                 buffer = buffer[consumed_bytes:]
                 command_name = command[0].upper()
-                if transaction_queue is not None and command_name not in (b"EXEC", b"DISCARD", b"MULTI"):
+                if transaction_queue is not None and command_name not in (b"EXEC", b"DISCARD", b"MULTI", b"WATCH"):
                     transaction_queue.append(command)
                     connection.sendall(b"+QUEUED\r\n")
                     continue
