@@ -455,7 +455,11 @@ def handle_client(connection):
                     members = sorted_sets.get(command[1], {})
                     ordered = sorted(members, key=lambda item: (members[item], item))
                     start, stop = int(command[2]), int(command[3])
-                    selected = ordered[start : stop + 1] if start <= stop else []
+                    start = start if start >= 0 else len(ordered) + start
+                    stop = stop if stop >= 0 else len(ordered) + stop
+                    start = max(start, 0)
+                    stop = min(stop, len(ordered) - 1)
+                    selected = ordered[start : stop + 1] if start <= stop and start < len(ordered) else []
                     response = b"*" + str(len(selected)).encode() + b"\r\n"
                     for member in selected:
                         response += b"$" + str(len(member)).encode() + b"\r\n" + member + b"\r\n"
