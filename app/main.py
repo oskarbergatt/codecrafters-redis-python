@@ -71,6 +71,10 @@ def handle_client(connection):
                 if command_name == b"EXEC" and transaction_queue is None:
                     connection.sendall(b"-ERR EXEC without MULTI\r\n")
                     continue
+                if command_name == b"EXEC" and transaction_queue == []:
+                    transaction_queue = None
+                    connection.sendall(b"*0\r\n")
+                    continue
                 if command_name == b"ECHO":
                     argument = command[1]
                     connection.sendall(
