@@ -194,6 +194,8 @@ def handle_client(connection):
                     if role == b"master":
                         info += b"master_replid:" + master_replid + b"\r\nmaster_repl_offset:0\r\n"
                     connection.sendall(b"$" + str(len(info)).encode() + b"\r\n" + info + b"\r\n")
+                elif command_name == b"REPLCONF":
+                    connection.sendall(b"+OK\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
