@@ -70,6 +70,9 @@ def handle_client(connection):
                     connection.sendall(b"+OK\r\n")
                     continue
                 if command_name == b"WATCH":
+                    if transaction_queue is not None:
+                        connection.sendall(b"-ERR WATCH inside MULTI is not allowed\r\n")
+                        continue
                     watched_keys.update(command[1:])
                     connection.sendall(b"+OK\r\n")
                     continue
