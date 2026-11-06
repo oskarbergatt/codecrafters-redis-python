@@ -75,6 +75,13 @@ def handle_client(connection):
                     transaction_queue = None
                     connection.sendall(b"*0\r\n")
                     continue
+                if command_name == b"DISCARD":
+                    if transaction_queue is None:
+                        connection.sendall(b"-ERR DISCARD without MULTI\r\n")
+                    else:
+                        transaction_queue = None
+                        connection.sendall(b"+OK\r\n")
+                    continue
                 if command_name == b"EXEC" and transaction_queue is not None:
                     queued = transaction_queue
                     transaction_queue = None
