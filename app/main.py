@@ -84,6 +84,12 @@ def handle_client(connection):
                     connection.sendall(response)
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
+                    if entry_id.endswith(b"-*"):
+                        time_part = entry_id[:-2]
+                        prior = streams.get(key, [])
+                        same_time = [int(item_id.split(b"-", 1)[1]) for item_id, _ in prior if item_id.split(b"-", 1)[0] == time_part]
+                        sequence = max(same_time) + 1 if same_time else (1 if time_part == b"0" else 0)
+                        entry_id = time_part + b"-" + str(sequence).encode()
                     if entry_id == b"0-0":
                         connection.sendall(b"-ERR The ID specified in XADD must be greater than 0-0\r\n")
                         continue
