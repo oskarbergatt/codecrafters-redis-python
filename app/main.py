@@ -118,7 +118,9 @@ def handle_client(connection):
                         connection.sendall(b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n")
                         continue
                     fields = list(zip(command[3::2], command[4::2]))
-                    streams.setdefault(key, []).append((entry_id, fields))
+                    with list_condition:
+                        streams.setdefault(key, []).append((entry_id, fields))
+                        list_condition.notify_all()
                     connection.sendall(b"$" + str(len(entry_id)).encode() + b"\r\n" + entry_id + b"\r\n")
                 elif command_name == b"XRANGE":
                     key, start_id, end_id = command[1:4]
