@@ -209,6 +209,15 @@ def handle_client(connection):
                         subscribed_channels.add(channel)
                         connection.sendall(b"*3\r\n$9\r\nsubscribe\r\n$" + str(len(channel)).encode() + b"\r\n" + channel + b"\r\n:" + str(len(subscribed_channels)).encode() + b"\r\n")
                     continue
+                if subscribed_channels and command_name not in (b"SUBSCRIBE", b"UNSUBSCRIBE", b"PSUBSCRIBE", b"PUNSUBSCRIBE", b"PING", b"QUIT", b"RESET"):
+                    connection.sendall(b"-ERR Can't execute '" + command[0].lower() + b"' in subscribed mode\r\n")
+                    continue
+                if subscribed_channels and command_name == b"PING":
+                    connection.sendall(b"*2\r\n$4\r\npong\r\n$0\r\n\r\n")
+                    continue
+                if subscribed_channels and command_name == b"QUIT":
+                    connection.sendall(b"+OK\r\n")
+                    return
                 if command_name in (b"SET", b"INCR", b"DEL", b"RPUSH", b"LPUSH", b"LPOP", b"XADD"):
                     append_aof_command(command)
                 if command_name in (b"SET", b"INCR", b"RPUSH", b"LPUSH", b"LPOP", b"XADD"):
