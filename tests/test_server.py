@@ -36,6 +36,31 @@ class RedisServerTests(unittest.TestCase):
             process.terminate()
             process.wait(timeout=5)
 
+    def test_replies_to_multiple_commands_on_the_same_connection(self):
+        """Closing a connection after the first command should fail this test."""
+        process = subprocess.Popen(
+            ["./your_program.sh"],
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            for _ in range(30):
+                try:
+                    with socket.create_connection(("localhost", 6379), timeout=0.1) as client:
+                        client.sendall(b"PING\r\n")
+                        self.assertEqual(client.recv(1024), b"+PONG\r\n")
+                        client.sendall(b"PING\r\n")
+                        self.assertEqual(client.recv(1024), b"+PONG\r\n")
+                        return
+                except ConnectionRefusedError:
+                    time.sleep(0.1)
+
+            self.fail("Redis server did not accept a connection on port 6379")
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+
 
 if __name__ == "__main__":
     unittest.main()
