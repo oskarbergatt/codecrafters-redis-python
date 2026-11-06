@@ -10,6 +10,7 @@ from collections import defaultdict, deque
 store = {}
 lists = {}
 streams = {}
+sorted_sets = {}
 list_condition = threading.Condition()
 blocked_clients = defaultdict(deque)
 key_versions = defaultdict(int)
@@ -230,9 +231,9 @@ def handle_client(connection):
                 if subscribed_channels and command_name == b"QUIT":
                     connection.sendall(b"+OK\r\n")
                     return
-                if command_name in (b"SET", b"INCR", b"DEL", b"RPUSH", b"LPUSH", b"LPOP", b"XADD"):
+                if command_name in (b"SET", b"INCR", b"DEL", b"RPUSH", b"LPUSH", b"LPOP", b"XADD", b"ZADD"):
                     append_aof_command(command)
-                if command_name in (b"SET", b"INCR", b"RPUSH", b"LPUSH", b"LPOP", b"XADD"):
+                if command_name in (b"SET", b"INCR", b"RPUSH", b"LPUSH", b"LPOP", b"XADD", b"ZADD"):
                     encoded_command = b"*" + str(len(command)).encode() + b"\r\n"
                     for argument in command:
                         encoded_command += b"$" + str(len(argument)).encode() + b"\r\n" + argument + b"\r\n"
@@ -432,6 +433,16 @@ def handle_client(connection):
                     with replica_lock:
                         replica_connections.append(connection)
                         replica_offsets[connection] = 0
+                elif command_name == b"ZADD":
+                    key = command[1]
+                    members = sorted_sets.setdefault(key, {})
+                    added = 0
+                    for index in range(2, len(command), 2):
+                        score, member = float(command[index]), command[index + 1]
+                        if member not in members:
+                            added += 1
+                        members[member] = score
+                    connection.sendall(b":" + str(added).encode() + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
