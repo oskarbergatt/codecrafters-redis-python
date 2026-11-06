@@ -9,8 +9,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class RedisServerTests(unittest.TestCase):
-    def test_accepts_a_tcp_connection_on_port_6379(self):
-        """Removing the listening socket should make this connection fail."""
+    def test_replies_with_pong_to_a_command(self):
+        """Removing the RESP response should make this assertion fail."""
         process = subprocess.Popen(
             ["./your_program.sh"],
             cwd=PROJECT_ROOT,
@@ -20,7 +20,13 @@ class RedisServerTests(unittest.TestCase):
         try:
             for _ in range(30):
                 try:
-                    with socket.create_connection(("localhost", 6379), timeout=0.1):
+                    with socket.create_connection(("localhost", 6379), timeout=0.1) as client:
+                        client.sendall(b"PING\r\n")
+                        try:
+                            response = client.recv(1024)
+                        except ConnectionResetError:
+                            response = b""
+                        self.assertEqual(response, b"+PONG\r\n")
                         return
                 except ConnectionRefusedError:
                     time.sleep(0.1)
