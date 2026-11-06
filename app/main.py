@@ -464,6 +464,8 @@ def handle_client(connection):
                     for member in selected:
                         response += b"$" + str(len(member)).encode() + b"\r\n" + member + b"\r\n"
                     connection.sendall(response)
+                elif command_name == b"ZCARD":
+                    connection.sendall(b":" + str(len(sorted_sets.get(command[1], {}))).encode() + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
