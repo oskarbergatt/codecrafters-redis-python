@@ -186,7 +186,7 @@ def handle_client(connection):
                         response = b"+none\r\n"
                     connection.sendall(response)
                 elif command_name == b"INFO":
-                    info = b"role:master\r\n"
+                    info = b"role:" + globals().get("server_role", b"master") + b"\r\n"
                     connection.sendall(b"$" + str(len(info)).encode() + b"\r\n" + info + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
@@ -342,8 +342,13 @@ def handle_client(connection):
 
 def main():
     port = 6379
+    role = b"master"
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
+    if "--replicaof" in sys.argv:
+        role = b"slave"
+    global server_role
+    server_role = role
     server_socket = socket.create_server(("localhost", port), reuse_port=True)
     while True:
         connection, _ = server_socket.accept()
