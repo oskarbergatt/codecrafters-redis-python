@@ -519,6 +519,10 @@ def main():
         config[b"dir"] = sys.argv[sys.argv.index("--dir") + 1].encode()
     if "--dbfilename" in sys.argv:
         config[b"dbfilename"] = sys.argv[sys.argv.index("--dbfilename") + 1].encode()
+    for option in (b"appendonly", b"appenddirname", b"appendfilename", b"appendfsync"):
+        flag = "--" + option.decode()
+        if flag in sys.argv:
+            config[option] = sys.argv[sys.argv.index(flag) + 1].encode()
     load_rdb_file()
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
