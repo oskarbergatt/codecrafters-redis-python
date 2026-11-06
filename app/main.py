@@ -130,7 +130,10 @@ def handle_client(connection):
                                 response += b"$" + str(len(item)).encode() + b"\r\n" + item + b"\r\n"
                     connection.sendall(response)
                 elif command_name == b"XREAD":
-                    marker = command.index(b"STREAMS")
+                    marker = next((index for index, part in enumerate(command) if part.upper() == b"STREAMS"), None)
+                    if marker is None or len(command) < marker + 3:
+                        connection.sendall(b"*-1\r\n")
+                        continue
                     keys = command[marker + 1 : marker + 2]
                     ids = command[marker + 2 : marker + 3]
                     streams_response = []
