@@ -84,6 +84,18 @@ def handle_client(connection):
                     connection.sendall(response)
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
+                    if entry_id == b"0-0":
+                        connection.sendall(b"-ERR The ID specified in XADD must be greater than 0-0\r\n")
+                        continue
+                    try:
+                        new_id = tuple(map(int, entry_id.split(b"-", 1)))
+                    except (ValueError, TypeError):
+                        connection.sendall(b"-ERR Invalid stream ID specified\r\n")
+                        continue
+                    existing = streams.get(key, [])
+                    if existing and new_id <= tuple(map(int, existing[-1][0].split(b"-", 1))):
+                        connection.sendall(b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n")
+                        continue
                     fields = list(zip(command[3::2], command[4::2]))
                     streams.setdefault(key, []).append((entry_id, fields))
                     connection.sendall(b"$" + str(len(entry_id)).encode() + b"\r\n" + entry_id + b"\r\n")
