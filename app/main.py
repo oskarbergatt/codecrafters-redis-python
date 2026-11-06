@@ -123,6 +123,27 @@ def load_rdb_file():
             expiry = None
 
 
+def append_aof_command(command):
+    if config[b"appendonly"].lower() != b"yes":
+        return
+    directory = os.path.join(config[b"dir"].decode(), config[b"appenddirname"].decode())
+    manifest_path = os.path.join(directory, config[b"appendfilename"].decode() + ".manifest")
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as manifest:
+            manifest_parts = manifest.readline().split()
+        aof_name = manifest_parts[1]
+    except (OSError, IndexError):
+        return
+    encoded = b"*" + str(len(command)).encode() + b"\r\n"
+    for argument in command:
+        encoded += b"$" + str(len(argument)).encode() + b"\r\n" + argument + b"\r\n"
+    with open(os.path.join(directory, aof_name), "ab") as aof:
+        aof.write(encoded)
+        aof.flush()
+        if config[b"appendfsync"].lower() == b"always":
+            os.fsync(aof.fileno())
+
+
 def stream_id_tuple(value):
     if value == b"-":
         return -1, -1
@@ -145,6 +166,8 @@ def handle_client(connection):
                 command, consumed_bytes = parsed_command
                 buffer = buffer[consumed_bytes:]
                 command_name = command[0].upper()
+                if command_name in (b"SET", b"INCR", b"DEL", b"RPUSH", b"LPUSH", b"LPOP", b"XADD"):
+                    append_aof_command(command)
                 if command_name in (b"SET", b"INCR", b"RPUSH", b"LPUSH", b"LPOP", b"XADD"):
                     encoded_command = b"*" + str(len(command)).encode() + b"\r\n"
                     for argument in command:
