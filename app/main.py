@@ -523,6 +523,8 @@ def main():
         flag = "--" + option.decode()
         if flag in sys.argv:
             config[option] = sys.argv[sys.argv.index(flag) + 1].encode()
+    if config[b"appendonly"].lower() == b"yes":
+        os.makedirs(os.path.join(config[b"dir"].decode(), config[b"appenddirname"].decode()), exist_ok=True)
     load_rdb_file()
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
