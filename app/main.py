@@ -185,6 +185,9 @@ def handle_client(connection):
                     else:
                         response = b"+none\r\n"
                     connection.sendall(response)
+                elif command_name == b"INFO":
+                    info = b"role:master\r\n"
+                    connection.sendall(b"$" + str(len(info)).encode() + b"\r\n" + info + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
