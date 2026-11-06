@@ -5,6 +5,7 @@ from collections import defaultdict, deque
 
 store = {}
 lists = {}
+streams = {}
 list_condition = threading.Condition()
 blocked_clients = defaultdict(deque)
 
@@ -74,11 +75,18 @@ def handle_client(connection):
                     key = command[1]
                     if key in store:
                         response = b"+string\r\n"
+                    elif key in streams:
+                        response = b"+stream\r\n"
                     elif key in lists:
                         response = b"+list\r\n"
                     else:
                         response = b"+none\r\n"
                     connection.sendall(response)
+                elif command_name == b"XADD":
+                    key, entry_id = command[1], command[2]
+                    fields = list(zip(command[3::2], command[4::2]))
+                    streams.setdefault(key, []).append((entry_id, fields))
+                    connection.sendall(b"$" + str(len(entry_id)).encode() + b"\r\n" + entry_id + b"\r\n")
                 elif command_name == b"RPUSH":
                     with list_condition:
                         values = lists.setdefault(command[1], [])
