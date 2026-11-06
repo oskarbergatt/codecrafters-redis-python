@@ -1,6 +1,7 @@
 import socket  # noqa: F401
 import threading
 import time
+import sys
 from collections import defaultdict, deque
 
 store = {}
@@ -337,7 +338,10 @@ def handle_client(connection):
 
 
 def main():
-    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
+    port = 6379
+    if "--port" in sys.argv:
+        port = int(sys.argv[sys.argv.index("--port") + 1])
+    server_socket = socket.create_server(("localhost", port), reuse_port=True)
     while True:
         connection, _ = server_socket.accept()
         threading.Thread(target=handle_client, args=(connection,), daemon=True).start()
