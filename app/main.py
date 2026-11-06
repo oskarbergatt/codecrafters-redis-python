@@ -374,7 +374,9 @@ def handle_replication_stream(connection):
             command, consumed = parsed
             buffer = buffer[consumed:]
             name = command[0].upper()
-            if name == b"SET" and len(command) >= 3:
+            if name == b"REPLCONF" and len(command) >= 2 and command[1].upper() == b"GETACK":
+                connection.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n")
+            elif name == b"SET" and len(command) >= 3:
                 store[command[1]] = (command[2], None)
                 key_versions[command[1]] += 1
             elif name == b"DEL":
