@@ -52,6 +52,76 @@ def parse_command(buffer):
     return arguments, position
 
 
+def read_rdb_length(data, position):
+    first = data[position]
+    kind = first >> 6
+    if kind == 0:
+        return first & 0x3F, position + 1
+    if kind == 1:
+        return ((first & 0x3F) << 8) | data[position + 1], position + 2
+    if kind == 2:
+        return int.from_bytes(data[position + 1 : position + 5], "big"), position + 5
+    return first & 0x3F, position + 1
+
+
+def read_rdb_string(data, position):
+    first = data[position]
+    if first >> 6 == 3:
+        encoding = first & 0x3F
+        if encoding == 0:
+            size = int.from_bytes(data[position + 1 : position + 2], "little", signed=True)
+            return str(size).encode(), position + 2
+        if encoding == 1:
+            size = int.from_bytes(data[position + 1 : position + 3], "little", signed=True)
+            return str(size).encode(), position + 3
+        if encoding == 2:
+            size = int.from_bytes(data[position + 1 : position + 5], "little", signed=True)
+            return str(size).encode(), position + 5
+        raise ValueError("Unsupported RDB string encoding")
+    length, position = read_rdb_length(data, position)
+    return data[position : position + length], position + length
+
+
+def load_rdb_file():
+    path = config[b"dir"].decode() + "/" + config[b"dbfilename"].decode()
+    try:
+        data = open(path, "rb").read()
+    except OSError:
+        return
+    if not data.startswith(b"REDIS"):
+        return
+    position = 9
+    expiry = None
+    while position < len(data):
+        opcode = data[position]
+        position += 1
+        if opcode == 0xFF:
+            break
+        if opcode == 0xFA:
+            _, position = read_rdb_string(data, position)
+            _, position = read_rdb_string(data, position)
+        elif opcode == 0xFE:
+            _, position = read_rdb_length(data, position)
+        elif opcode == 0xFB:
+            _, position = read_rdb_length(data, position)
+            _, position = read_rdb_length(data, position)
+        elif opcode == 0xFC:
+            expiry = int.from_bytes(data[position : position + 8], "little") / 1000
+            position += 8
+        elif opcode == 0xFD:
+            expiry = int.from_bytes(data[position : position + 4], "little")
+            position += 4
+        else:
+            value_type = opcode
+            if value_type != 0:
+                raise ValueError("Unsupported RDB value type")
+            key, position = read_rdb_string(data, position)
+            value, position = read_rdb_string(data, position)
+            if expiry is None or expiry > time.time():
+                store[key] = (value, (time.monotonic() + max(0, expiry - time.time())) if expiry is not None else None)
+            expiry = None
+
+
 def stream_id_tuple(value):
     if value == b"-":
         return -1, -1
@@ -216,6 +286,13 @@ def handle_client(connection):
                     parameter = command[2].lower()
                     value = config.get(parameter, b"")
                     connection.sendall(b"*2\r\n$" + str(len(parameter)).encode() + b"\r\n" + parameter + b"\r\n$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n")
+                elif command_name == b"KEYS":
+                    pattern = command[1] if len(command) > 1 else b"*"
+                    keys = list(store.keys()) if pattern == b"*" else []
+                    response = b"*" + str(len(keys)).encode() + b"\r\n"
+                    for key in keys:
+                        response += b"$" + str(len(key)).encode() + b"\r\n" + key + b"\r\n"
+                    connection.sendall(response)
                 elif command_name == b"REPLCONF":
                     if len(command) >= 3 and command[1].upper() == b"ACK":
                         with replica_ack_condition:
@@ -441,6 +518,7 @@ def main():
         config[b"dir"] = sys.argv[sys.argv.index("--dir") + 1].encode()
     if "--dbfilename" in sys.argv:
         config[b"dbfilename"] = sys.argv[sys.argv.index("--dbfilename") + 1].encode()
+    load_rdb_file()
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
     if "--replicaof" in sys.argv:
