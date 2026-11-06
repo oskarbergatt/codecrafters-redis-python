@@ -3,6 +3,7 @@ import threading
 import time
 
 store = {}
+lists = {}
 
 
 def parse_command(buffer):
@@ -66,6 +67,10 @@ def handle_client(connection):
                         connection.sendall(
                             b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n"
                         )
+                elif command_name == b"RPUSH":
+                    values = lists.setdefault(command[1], [])
+                    values.append(command[2])
+                    connection.sendall(b":" + str(len(values)).encode() + b"\r\n")
                 else:
                     connection.sendall(b"+PONG\r\n")
 
