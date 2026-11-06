@@ -61,6 +61,39 @@ class RedisServerTests(unittest.TestCase):
             process.terminate()
             process.wait(timeout=5)
 
+    def test_replies_to_a_second_client_while_the_first_client_is_idle(self):
+        """Serving clients serially should leave the second client without a reply."""
+        process = subprocess.Popen(
+            ["./your_program.sh"],
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        first_client = None
+        try:
+            for _ in range(30):
+                try:
+                    first_client = socket.create_connection(("localhost", 6379), timeout=0.1)
+                    break
+                except ConnectionRefusedError:
+                    time.sleep(0.1)
+            else:
+                self.fail("Redis server did not accept a connection on port 6379")
+
+            with socket.create_connection(("localhost", 6379), timeout=0.1) as second_client:
+                second_client.settimeout(0.2)
+                second_client.sendall(b"PING\r\n")
+                try:
+                    response = second_client.recv(1024)
+                except socket.timeout:
+                    response = b""
+                self.assertEqual(response, b"+PONG\r\n")
+        finally:
+            if first_client:
+                first_client.close()
+            process.terminate()
+            process.wait(timeout=5)
+
 
 if __name__ == "__main__":
     unittest.main()
