@@ -77,6 +77,13 @@ def handle_client(connection):
                     connection.sendall(b":" + str(len(values)).encode() + b"\r\n")
                 elif command_name == b"LLEN":
                     connection.sendall(b":" + str(len(lists.get(command[1], []))).encode() + b"\r\n")
+                elif command_name == b"LPOP":
+                    values = lists.get(command[1], [])
+                    if values:
+                        value = values.pop(0)
+                        connection.sendall(b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n")
+                    else:
+                        connection.sendall(b"$-1\r\n")
                 elif command_name == b"LRANGE":
                     values = lists.get(command[1], [])
                     start, stop = int(command[2]), int(command[3])
