@@ -144,6 +144,43 @@ def append_aof_command(command):
             os.fsync(aof.fileno())
 
 
+def load_aof_file():
+    if config[b"appendonly"].lower() != b"yes":
+        return
+    directory = os.path.join(config[b"dir"].decode(), config[b"appenddirname"].decode())
+    manifest_path = os.path.join(directory, config[b"appendfilename"].decode() + ".manifest")
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as manifest:
+            entries = [line.split() for line in manifest if line.strip()]
+    except OSError:
+        return
+    for entry in entries:
+        if len(entry) < 6 or entry[0] != "file" or entry[4] != "type" or entry[5] != "i":
+            continue
+        try:
+            data = open(os.path.join(directory, entry[1]), "rb").read()
+        except OSError:
+            continue
+        while parsed := parse_command(data):
+            command, consumed = parsed
+            data = data[consumed:]
+            if not command:
+                continue
+            name = command[0].upper()
+            if name == b"SET" and len(command) >= 3:
+                expiry = None
+                if len(command) >= 5 and command[3].upper() == b"PX":
+                    expiry = time.monotonic() + int(command[4]) / 1000
+                store[command[1]] = (command[2], expiry)
+            elif name == b"DEL":
+                for key in command[1:]:
+                    store.pop(key, None)
+            elif name == b"INCR" and len(command) > 1:
+                key = command[1]
+                current = int(store[key][0]) if key in store else 0
+                store[key] = (str(current + 1).encode(), None)
+
+
 def stream_id_tuple(value):
     if value == b"-":
         return -1, -1
@@ -550,11 +587,13 @@ def main():
         aof_directory = os.path.join(config[b"dir"].decode(), config[b"appenddirname"].decode())
         os.makedirs(aof_directory, exist_ok=True)
         incremental_aof = config[b"appendfilename"].decode() + ".1.incr.aof"
-        open(os.path.join(aof_directory, incremental_aof), "ab").close()
         manifest_path = os.path.join(aof_directory, config[b"appendfilename"].decode() + ".manifest")
-        with open(manifest_path, "w", encoding="utf-8") as manifest:
-            manifest.write(f"file {incremental_aof} seq 1 type i\n")
+        if not os.path.exists(manifest_path):
+            open(os.path.join(aof_directory, incremental_aof), "ab").close()
+            with open(manifest_path, "w", encoding="utf-8") as manifest:
+                manifest.write(f"file {incremental_aof} seq 1 type i\n")
     load_rdb_file()
+    load_aof_file()
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
     if "--replicaof" in sys.argv:
