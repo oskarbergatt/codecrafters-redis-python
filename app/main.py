@@ -213,6 +213,14 @@ def handle_client(connection):
                             channel_subscribers[channel].add(connection)
                         connection.sendall(b"*3\r\n$9\r\nsubscribe\r\n$" + str(len(channel)).encode() + b"\r\n" + channel + b"\r\n:" + str(len(subscribed_channels)).encode() + b"\r\n")
                     continue
+                if command_name == b"UNSUBSCRIBE":
+                    channels = command[1:] or list(subscribed_channels) or [b""]
+                    for channel in channels:
+                        subscribed_channels.discard(channel)
+                        with subscriber_lock:
+                            channel_subscribers[channel].discard(connection)
+                        connection.sendall(b"*3\r\n$11\r\nunsubscribe\r\n$" + str(len(channel)).encode() + b"\r\n" + channel + b"\r\n:" + str(len(subscribed_channels)).encode() + b"\r\n")
+                    continue
                 if subscribed_channels and command_name not in (b"SUBSCRIBE", b"UNSUBSCRIBE", b"PSUBSCRIBE", b"PUNSUBSCRIBE", b"PING", b"QUIT", b"RESET"):
                     connection.sendall(b"-ERR Can't execute '" + command[0].lower() + b"' in subscribed mode\r\n")
                     continue
