@@ -71,6 +71,14 @@ def handle_client(connection):
                     values = lists.setdefault(command[1], [])
                     values.extend(command[2:])
                     connection.sendall(b":" + str(len(values)).encode() + b"\r\n")
+                elif command_name == b"LRANGE":
+                    values = lists.get(command[1], [])
+                    start, stop = int(command[2]), int(command[3])
+                    selected = values[start : stop + 1] if start <= stop else []
+                    response = b"*" + str(len(selected)).encode() + b"\r\n"
+                    for value in selected:
+                        response += b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n"
+                    connection.sendall(response)
                 else:
                     connection.sendall(b"+PONG\r\n")
 
