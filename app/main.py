@@ -528,6 +528,9 @@ def main():
         os.makedirs(aof_directory, exist_ok=True)
         incremental_aof = config[b"appendfilename"].decode() + ".1.incr.aof"
         open(os.path.join(aof_directory, incremental_aof), "ab").close()
+        manifest_path = os.path.join(aof_directory, config[b"appendfilename"].decode() + ".manifest")
+        with open(manifest_path, "w", encoding="utf-8") as manifest:
+            manifest.write(f"file {incremental_aof} seq 1 type i\n")
     load_rdb_file()
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
