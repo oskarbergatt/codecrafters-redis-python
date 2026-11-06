@@ -349,13 +349,19 @@ def handle_client(connection):
 def main():
     port = 6379
     role = b"master"
+    replica_target = None
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
     if "--replicaof" in sys.argv:
         role = b"slave"
+        replica_target = sys.argv[sys.argv.index("--replicaof") + 1].split()
     global server_role
     server_role = role
     server_socket = socket.create_server(("localhost", port), reuse_port=True)
+    if replica_target:
+        master_host, master_port = replica_target
+        with socket.create_connection((master_host, int(master_port))) as master_connection:
+            master_connection.sendall(b"*1\r\n$4\r\nPING\r\n")
     while True:
         connection, _ = server_socket.accept()
         threading.Thread(target=handle_client, args=(connection,), daemon=True).start()
