@@ -129,6 +129,27 @@ def handle_client(connection):
                             for item in (field, value):
                                 response += b"$" + str(len(item)).encode() + b"\r\n" + item + b"\r\n"
                     connection.sendall(response)
+                elif command_name == b"XREAD":
+                    marker = command.index(b"STREAMS")
+                    keys = command[marker + 1 : marker + 2]
+                    ids = command[marker + 2 : marker + 3]
+                    streams_response = []
+                    for key, start_id in zip(keys, ids):
+                        after = id_tuple(start_id)
+                        entries = [(entry_id, fields) for entry_id, fields in streams.get(key, []) if id_tuple(entry_id) > after]
+                        if entries:
+                            entry_bytes = b"*" + str(len(entries)).encode() + b"\r\n"
+                            for entry_id, fields in entries:
+                                entry_bytes += b"*2\r\n$" + str(len(entry_id)).encode() + b"\r\n" + entry_id + b"\r\n"
+                                flattened = [part for pair in fields for part in pair]
+                                entry_bytes += b"*" + str(len(flattened)).encode() + b"\r\n"
+                                for part in flattened:
+                                    entry_bytes += b"$" + str(len(part)).encode() + b"\r\n" + part + b"\r\n"
+                            streams_response.append((key, entry_bytes))
+                    response = b"*" + str(len(streams_response)).encode() + b"\r\n"
+                    for key, entries in streams_response:
+                        response += b"*2\r\n$" + str(len(key)).encode() + b"\r\n" + key + b"\r\n" + entries
+                    connection.sendall(response)
                 elif command_name == b"RPUSH":
                     with list_condition:
                         values = lists.setdefault(command[1], [])
