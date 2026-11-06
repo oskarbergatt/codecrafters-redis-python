@@ -12,6 +12,8 @@ streams = {}
 list_condition = threading.Condition()
 blocked_clients = defaultdict(deque)
 key_versions = defaultdict(int)
+replica_connections = []
+replica_lock = threading.Lock()
 master_replid = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40)).encode()
 
 
@@ -67,6 +69,16 @@ def handle_client(connection):
                 command, consumed_bytes = parsed_command
                 buffer = buffer[consumed_bytes:]
                 command_name = command[0].upper()
+                if command_name in (b"SET", b"INCR", b"RPUSH", b"LPUSH", b"LPOP", b"XADD"):
+                    encoded_command = b"*" + str(len(command)).encode() + b"\r\n"
+                    for argument in command:
+                        encoded_command += b"$" + str(len(argument)).encode() + b"\r\n" + argument + b"\r\n"
+                    with replica_lock:
+                        for replica_connection in list(replica_connections):
+                            try:
+                                replica_connection.sendall(encoded_command)
+                            except OSError:
+                                replica_connections.remove(replica_connection)
                 if transaction_queue is not None and command_name not in (b"EXEC", b"DISCARD", b"MULTI", b"WATCH"):
                     transaction_queue.append(command)
                     connection.sendall(b"+QUEUED\r\n")
@@ -200,6 +212,8 @@ def handle_client(connection):
                     connection.sendall(b"+FULLRESYNC " + master_replid + b" 0\r\n")
                     empty_rdb = b"REDIS0011\xfe\x00\xff" + b"\x00" * 8
                     connection.sendall(b"$" + str(len(empty_rdb)).encode() + b"\r\n" + empty_rdb)
+                    with replica_lock:
+                        replica_connections.append(connection)
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
