@@ -443,6 +443,14 @@ def handle_client(connection):
                             added += 1
                         members[member] = score
                     connection.sendall(b":" + str(added).encode() + b"\r\n")
+                elif command_name == b"ZRANK":
+                    members = sorted_sets.get(command[1])
+                    member = command[2]
+                    if members is None or member not in members:
+                        connection.sendall(b"$-1\r\n")
+                    else:
+                        ordered = sorted(members, key=lambda item: (members[item], item))
+                        connection.sendall(b":" + str(ordered.index(member)).encode() + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
