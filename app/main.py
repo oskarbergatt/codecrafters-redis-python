@@ -96,6 +96,8 @@ def handle_client(connection):
                         connection.sendall(b"-ERR DISCARD without MULTI\r\n")
                     else:
                         transaction_queue = None
+                        watched_keys.clear()
+                        watched_versions.clear()
                         connection.sendall(b"+OK\r\n")
                     continue
                 if command_name == b"EXEC" and transaction_queue is not None:
