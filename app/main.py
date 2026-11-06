@@ -54,6 +54,7 @@ def handle_client(connection):
     with connection:
         buffer = b""
         transaction_queue = None
+        watched_keys = set()
         while data := connection.recv(1024):
             buffer += data
             while parsed_command := parse_command(buffer):
@@ -66,6 +67,10 @@ def handle_client(connection):
                     continue
                 if command_name == b"MULTI":
                     transaction_queue = []
+                    connection.sendall(b"+OK\r\n")
+                    continue
+                if command_name == b"WATCH":
+                    watched_keys.update(command[1:])
                     connection.sendall(b"+OK\r\n")
                     continue
                 if command_name == b"EXEC" and transaction_queue is None:
