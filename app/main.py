@@ -14,6 +14,8 @@ blocked_clients = defaultdict(deque)
 key_versions = defaultdict(int)
 replica_connections = []
 replica_lock = threading.Lock()
+replica_offsets = {}
+master_repl_offset = 0
 master_replid = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40)).encode()
 
 
@@ -58,6 +60,7 @@ def stream_id_tuple(value):
 
 
 def handle_client(connection):
+    global master_repl_offset
     with connection:
         buffer = b""
         transaction_queue = None
@@ -74,6 +77,7 @@ def handle_client(connection):
                     for argument in command:
                         encoded_command += b"$" + str(len(argument)).encode() + b"\r\n" + argument + b"\r\n"
                     with replica_lock:
+                        master_repl_offset += len(encoded_command)
                         for replica_connection in list(replica_connections):
                             try:
                                 replica_connection.sendall(encoded_command)
@@ -209,8 +213,45 @@ def handle_client(connection):
                 elif command_name == b"REPLCONF":
                     connection.sendall(b"+OK\r\n")
                 elif command_name == b"WAIT":
+                    requested = int(command[1]) if len(command) > 1 else 0
+                    timeout_seconds = max(0, int(command[2])) / 1000 if len(command) > 2 else 0
                     with replica_lock:
-                        replica_count = len(replica_connections)
+                        target_offset = master_repl_offset
+                        current_replicas = list(replica_connections)
+                        if target_offset:
+                            getack = b"*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n"
+                            for replica_connection in current_replicas:
+                                try:
+                                    replica_connection.sendall(getack)
+                                except OSError:
+                                    replica_connections.remove(replica_connection)
+                                    replica_offsets.pop(replica_connection, None)
+                    deadline = time.monotonic() + timeout_seconds
+                    for replica_connection in current_replicas:
+                        remaining = max(0, deadline - time.monotonic())
+                        if remaining == 0 and timeout_seconds > 0:
+                            break
+                        try:
+                            replica_connection.settimeout(remaining if timeout_seconds > 0 else 0.25)
+                            response = b""
+                            while not parse_command(response):
+                                chunk = replica_connection.recv(1)
+                                if not chunk:
+                                    break
+                                response += chunk
+                            parsed_ack = parse_command(response)
+                            if parsed_ack and len(parsed_ack[0]) >= 3 and parsed_ack[0][0].upper() == b"REPLCONF" and parsed_ack[0][1].upper() == b"ACK":
+                                with replica_lock:
+                                    replica_offsets[replica_connection] = int(parsed_ack[0][2])
+                        except (OSError, ValueError):
+                            pass
+                        finally:
+                            try:
+                                replica_connection.settimeout(None)
+                            except OSError:
+                                pass
+                    with replica_lock:
+                        replica_count = sum(replica_offsets.get(replica_connection, 0) >= target_offset for replica_connection in replica_connections)
                     connection.sendall(b":" + str(replica_count).encode() + b"\r\n")
                 elif command_name == b"PSYNC":
                     connection.sendall(b"+FULLRESYNC " + master_replid + b" 0\r\n")
@@ -218,6 +259,7 @@ def handle_client(connection):
                     connection.sendall(b"$" + str(len(empty_rdb)).encode() + b"\r\n" + empty_rdb)
                     with replica_lock:
                         replica_connections.append(connection)
+                        replica_offsets[connection] = 0
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
