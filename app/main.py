@@ -451,6 +451,15 @@ def handle_client(connection):
                     else:
                         ordered = sorted(members, key=lambda item: (members[item], item))
                         connection.sendall(b":" + str(ordered.index(member)).encode() + b"\r\n")
+                elif command_name == b"ZRANGE":
+                    members = sorted_sets.get(command[1], {})
+                    ordered = sorted(members, key=lambda item: (members[item], item))
+                    start, stop = int(command[2]), int(command[3])
+                    selected = ordered[start : stop + 1] if start <= stop else []
+                    response = b"*" + str(len(selected)).encode() + b"\r\n"
+                    for member in selected:
+                        response += b"$" + str(len(member)).encode() + b"\r\n" + member + b"\r\n"
+                    connection.sendall(response)
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
