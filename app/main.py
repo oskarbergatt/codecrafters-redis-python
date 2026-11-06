@@ -79,7 +79,15 @@ def handle_client(connection):
                     connection.sendall(b":" + str(len(lists.get(command[1], []))).encode() + b"\r\n")
                 elif command_name == b"LPOP":
                     values = lists.get(command[1], [])
-                    if values:
+                    if len(command) > 2:
+                        count = max(0, int(command[2]))
+                        removed = values[:count]
+                        del values[:count]
+                        response = b"*" + str(len(removed)).encode() + b"\r\n"
+                        for value in removed:
+                            response += b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n"
+                        connection.sendall(response)
+                    elif values:
                         value = values.pop(0)
                         connection.sendall(b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n")
                     else:
