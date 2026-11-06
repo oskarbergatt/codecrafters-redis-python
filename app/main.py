@@ -41,6 +41,15 @@ def parse_command(buffer):
     return arguments, position
 
 
+def stream_id_tuple(value):
+    if value == b"-":
+        return -1, -1
+    if value == b"+":
+        return float("inf"), float("inf")
+    parts = value.split(b"-", 1)
+    return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+
+
 def handle_client(connection):
     with connection:
         buffer = b""
@@ -113,14 +122,7 @@ def handle_client(connection):
                     connection.sendall(b"$" + str(len(entry_id)).encode() + b"\r\n" + entry_id + b"\r\n")
                 elif command_name == b"XRANGE":
                     key, start_id, end_id = command[1:4]
-                    def id_tuple(value):
-                        if value == b"-":
-                            return -1, -1
-                        if value == b"+":
-                            return float("inf"), float("inf")
-                        parts = value.split(b"-", 1)
-                        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
-                    selected = [(entry_id, fields) for entry_id, fields in streams.get(key, []) if id_tuple(start_id) <= id_tuple(entry_id) <= id_tuple(end_id)]
+                    selected = [(entry_id, fields) for entry_id, fields in streams.get(key, []) if stream_id_tuple(start_id) <= stream_id_tuple(entry_id) <= stream_id_tuple(end_id)]
                     response = b"*" + str(len(selected)).encode() + b"\r\n"
                     for entry_id, fields in selected:
                         response += b"*2\r\n$" + str(len(entry_id)).encode() + b"\r\n" + entry_id
@@ -138,8 +140,8 @@ def handle_client(connection):
                     ids = command[marker + 2 : marker + 3]
                     streams_response = []
                     for key, start_id in zip(keys, ids):
-                        after = id_tuple(start_id)
-                        entries = [(entry_id, fields) for entry_id, fields in streams.get(key, []) if id_tuple(entry_id) > after]
+                        after = stream_id_tuple(start_id)
+                        entries = [(entry_id, fields) for entry_id, fields in streams.get(key, []) if stream_id_tuple(entry_id) > after]
                         if entries:
                             entry_bytes = b"*" + str(len(entries)).encode() + b"\r\n"
                             for entry_id, fields in entries:
