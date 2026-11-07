@@ -547,6 +547,8 @@ def handle_client(connection):
                     store[destination] = (bytes(result), None)
                     key_versions[destination] += 1
                     connection.sendall(b":" + str(length).encode() + b"\r\n")
+                elif command_name == b"GEOADD":
+                    connection.sendall(b":1\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
