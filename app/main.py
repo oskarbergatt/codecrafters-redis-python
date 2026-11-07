@@ -529,6 +529,24 @@ def handle_client(connection):
                     connection.sendall(
                         b":" + str(sum(byte.bit_count() for byte in value)).encode() + b"\r\n"
                     )
+                elif command_name == b"BITOP":
+                    operation, destination = command[1].upper(), command[2]
+                    sources = [store.get(key, (b"", None))[0] for key in command[3:]]
+                    length = max((len(value) for value in sources), default=0)
+                    result = bytearray(length)
+                    for index in range(length):
+                        values = [value[index] if index < len(value) else 0 for value in sources]
+                        if operation == b"AND":
+                            result[index] = values[0]
+                            for value in values[1:]:
+                                result[index] &= value
+                        elif operation == b"OR":
+                            result[index] = 0
+                            for value in values:
+                                result[index] |= value
+                    store[destination] = (bytes(result), None)
+                    key_versions[destination] += 1
+                    connection.sendall(b":" + str(length).encode() + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
