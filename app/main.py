@@ -5,6 +5,7 @@ import sys
 import os
 import secrets
 import string
+import math
 from collections import defaultdict, deque
 
 store = {}
@@ -605,6 +606,34 @@ def handle_client(connection):
                                 b"\r\n$" + str(len(latitude_text)).encode() + b"\r\n" + latitude_text + b"\r\n"
                             )
                     connection.sendall(response)
+                elif command_name == b"GEODIST":
+                    members = sorted_sets.get(command[1], {})
+                    first = members.get(command[2])
+                    second = members.get(command[3])
+                    if first is None or second is None:
+                        connection.sendall(b"$-1\r\n")
+                    else:
+                        lon1, lat1 = geospatial_coordinates(int(first))
+                        lon2, lat2 = geospatial_coordinates(int(second))
+                        earth_radius = 6372797.560856
+                        lat1_rad, lat2_rad = math.radians(lat1), math.radians(lat2)
+                        delta_lat = math.radians(lat2 - lat1)
+                        delta_lon = math.radians(lon2 - lon1)
+                        haversine = (
+                            math.sin(delta_lat / 2) ** 2
+                            + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+                        )
+                        distance = 2 * earth_radius * math.asin(math.sqrt(haversine))
+                        if len(command) >= 5:
+                            unit = command[4].lower()
+                            if unit == b"km":
+                                distance /= 1000
+                            elif unit == b"mi":
+                                distance /= 1609.344
+                            elif unit == b"ft":
+                                distance *= 3.280839895013123
+                        text = f"{distance:.4f}".encode()
+                        connection.sendall(b"$" + str(len(text)).encode() + b"\r\n" + text + b"\r\n")
                 elif command_name == b"GEOADD":
                     valid = True
                     for offset in range(2, len(command), 3):
