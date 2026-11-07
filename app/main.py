@@ -429,6 +429,8 @@ def handle_client(connection):
                     if role == b"master":
                         info += b"master_replid:" + master_replid + b"\r\nmaster_repl_offset:0\r\n"
                     connection.sendall(b"$" + str(len(info)).encode() + b"\r\n" + info + b"\r\n")
+                elif command_name == b"ACL" and len(command) >= 2 and command[1].upper() == b"WHOAMI":
+                    connection.sendall(b"$7\r\ndefault\r\n")
                 elif command_name == b"CONFIG" and len(command) >= 3 and command[1].upper() == b"GET":
                     parameter = command[2].lower()
                     value = config.get(parameter, b"")
