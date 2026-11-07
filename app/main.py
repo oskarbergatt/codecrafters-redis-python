@@ -432,7 +432,7 @@ def handle_client(connection):
                 elif command_name == b"ACL" and len(command) >= 2 and command[1].upper() == b"WHOAMI":
                     connection.sendall(b"$7\r\ndefault\r\n")
                 elif command_name == b"ACL" and len(command) >= 2 and command[1].upper() == b"GETUSER":
-                    connection.sendall(b"*2\r\n$5\r\nflags\r\n*0\r\n")
+                    connection.sendall(b"*2\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n")
                 elif command_name == b"CONFIG" and len(command) >= 3 and command[1].upper() == b"GET":
                     parameter = command[2].lower()
                     value = config.get(parameter, b"")
