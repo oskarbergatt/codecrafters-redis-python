@@ -548,7 +548,27 @@ def handle_client(connection):
                     key_versions[destination] += 1
                     connection.sendall(b":" + str(length).encode() + b"\r\n")
                 elif command_name == b"GEOADD":
-                    connection.sendall(b":1\r\n")
+                    valid = True
+                    for offset in range(2, len(command), 3):
+                        if offset + 1 >= len(command):
+                            break
+                        try:
+                            longitude = float(command[offset])
+                            latitude = float(command[offset + 1])
+                        except ValueError:
+                            valid = False
+                            connection.sendall(b"-ERR invalid longitude,latitude pair\r\n")
+                            break
+                        if not -180.0 <= longitude <= 180.0:
+                            valid = False
+                            connection.sendall(b"-ERR invalid longitude value\r\n")
+                            break
+                        if not -85.05112878 <= latitude <= 85.05112878:
+                            valid = False
+                            connection.sendall(b"-ERR invalid latitude value\r\n")
+                            break
+                    if valid:
+                        connection.sendall(b":1\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
