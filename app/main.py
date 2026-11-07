@@ -26,6 +26,32 @@ config = {b"dir": os.getcwd().encode(), b"dbfilename": b"dump.rdb", b"appendonly
 master_replid = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40)).encode()
 
 
+def geospatial_score(longitude, latitude):
+    lon_min, lon_max = -180.0, 180.0
+    lat_min, lat_max = -85.05112878, 85.05112878
+    lon_bits = latitude_bits = 0
+    for _ in range(26):
+        midpoint = (lon_min + lon_max) / 2
+        if longitude >= midpoint:
+            lon_bits = (lon_bits << 1) | 1
+            lon_min = midpoint
+        else:
+            lon_bits <<= 1
+            lon_max = midpoint
+        midpoint = (lat_min + lat_max) / 2
+        if latitude >= midpoint:
+            latitude_bits = (latitude_bits << 1) | 1
+            lat_min = midpoint
+        else:
+            latitude_bits <<= 1
+            lat_max = midpoint
+    score = 0
+    for bit in range(25, -1, -1):
+        score = (score << 1) | ((lon_bits >> bit) & 1)
+        score = (score << 1) | ((latitude_bits >> bit) & 1)
+    return score
+
+
 def parse_command(buffer):
     if not buffer.startswith(b"*"):
         line_end = buffer.find(b"\r\n")
@@ -575,11 +601,14 @@ def handle_client(connection):
                         for offset in range(2, len(command), 3):
                             if offset + 2 >= len(command):
                                 break
+                            longitude = float(command[offset])
+                            latitude = float(command[offset + 1])
                             member = command[offset + 2]
                             if member not in members:
                                 added += 1
-                            members[member] = 0.0
-                            score_strings[member] = b"0"
+                            score = geospatial_score(longitude, latitude)
+                            members[member] = float(score)
+                            score_strings[member] = str(score).encode()
                         key_versions[key] += 1
                         connection.sendall(b":" + str(added).encode() + b"\r\n")
                 elif command_name == b"XADD":
