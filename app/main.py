@@ -449,11 +449,11 @@ def handle_client(connection):
                     else:
                         connection.sendall(b"-WRONGPASS invalid username-password pair or user is disabled.\r\n")
                 elif command_name == b"ACL" and len(command) >= 4 and command[1].upper() == b"SETUSER":
-                    if b">" in command:
-                        idx = command.index(b">")
-                        if idx + 1 < len(command):
-                            auth_password = command[idx + 1]
+                    for token in command[2:]:
+                        if token.startswith(b">"):
+                            auth_password = token[1:]
                             auth_hash = hashlib.sha256(auth_password).hexdigest().encode()
+                            break
                     connection.sendall(b"+OK\r\n")
                 elif command_name == b"CONFIG" and len(command) >= 3 and command[1].upper() == b"SET":
                     if command[2].lower() == b"requirepass" and len(command) >= 4:
