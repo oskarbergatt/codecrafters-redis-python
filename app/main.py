@@ -520,6 +520,15 @@ def handle_client(connection):
                     entry = store.get(command[1])
                     value = entry[0] if entry else b""
                     connection.sendall(b":" + str(len(value)).encode() + b"\r\n")
+                elif command_name == b"BITCOUNT":
+                    entry = store.get(command[1])
+                    value = entry[0] if entry else b""
+                    if len(command) == 4:
+                        start, end = int(command[2]), int(command[3])
+                        value = value[start : end + 1] if start <= end else b""
+                    connection.sendall(
+                        b":" + str(sum(byte.bit_count() for byte in value)).encode() + b"\r\n"
+                    )
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
