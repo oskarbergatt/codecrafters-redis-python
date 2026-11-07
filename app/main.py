@@ -573,6 +573,15 @@ def handle_client(connection):
                     store[destination] = (bytes(result), None)
                     key_versions[destination] += 1
                     connection.sendall(b":" + str(length).encode() + b"\r\n")
+                elif command_name == b"GEOPOS":
+                    members = sorted_sets.get(command[1], {})
+                    response = b"*" + str(len(command) - 2).encode() + b"\r\n"
+                    for member in command[2:]:
+                        if member not in members:
+                            response += b"*-1\r\n"
+                        else:
+                            response += b"*2\r\n$1\r\n0\r\n$1\r\n0\r\n"
+                    connection.sendall(response)
                 elif command_name == b"GEOADD":
                     valid = True
                     for offset in range(2, len(command), 3):
