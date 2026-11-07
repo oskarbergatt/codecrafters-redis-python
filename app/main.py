@@ -24,6 +24,7 @@ replica_ack_condition = threading.Condition(replica_lock)
 channel_subscribers = defaultdict(set)
 subscriber_lock = threading.Lock()
 config = {b"dir": os.getcwd().encode(), b"dbfilename": b"dump.rdb", b"appendonly": b"no", b"appenddirname": b"appendonlydir", b"appendfilename": b"appendonly.aof", b"appendfsync": b"everysec"}
+auth_password = None
 master_replid = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40)).encode()
 
 
@@ -239,6 +240,8 @@ def stream_id_tuple(value):
 
 
 def handle_client(connection):
+    global auth_password
+    authenticated = True
     global master_repl_offset
     with connection:
         buffer = b""
@@ -432,7 +435,22 @@ def handle_client(connection):
                 elif command_name == b"ACL" and len(command) >= 2 and command[1].upper() == b"WHOAMI":
                     connection.sendall(b"$7\r\ndefault\r\n")
                 elif command_name == b"ACL" and len(command) >= 2 and command[1].upper() == b"GETUSER":
-                    connection.sendall(b"*2\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n")
+                    if auth_password is None:
+                        connection.sendall(b"*4\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n$9\r\npasswords\r\n*0\r\n")
+                    else:
+                        connection.sendall(b"*4\r\n$5\r\nflags\r\n*0\r\n$9\r\npasswords\r\n*1\r\n$64\r\n" + (b"0" * 64) + b"\r\n")
+                elif command_name == b"AUTH":
+                    if len(command) >= 2 and (auth_password is None or command[-1] == auth_password):
+                        authenticated = True
+                        connection.sendall(b"+OK\r\n")
+                    else:
+                        connection.sendall(b"-WRONGPASS invalid username-password pair or user is disabled.\r\n")
+                elif command_name == b"CONFIG" and len(command) >= 3 and command[1].upper() == b"SET":
+                    if command[2].lower() == b"requirepass" and len(command) >= 4:
+                        auth_password = command[3]
+                        connection.sendall(b"+OK\r\n")
+                    else:
+                        connection.sendall(b"+OK\r\n")
                 elif command_name == b"CONFIG" and len(command) >= 3 and command[1].upper() == b"GET":
                     parameter = command[2].lower()
                     value = config.get(parameter, b"")
