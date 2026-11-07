@@ -232,7 +232,7 @@ def handle_client(connection):
                 if subscribed_channels and command_name == b"QUIT":
                     connection.sendall(b"+OK\r\n")
                     return
-                if command_name in (b"SET", b"INCR", b"DEL", b"RPUSH", b"LPUSH", b"LPOP", b"XADD", b"ZADD", b"SETBIT"):
+                if command_name in (b"SET", b"INCR", b"DEL", b"RPUSH", b"LPUSH", b"LPOP", b"XADD", b"ZADD", b"GEOADD", b"SETBIT"):
                     append_aof_command(command)
                 if command_name in (b"SET", b"INCR", b"RPUSH", b"LPUSH", b"LPOP", b"XADD", b"ZADD", b"SETBIT"):
                     encoded_command = b"*" + str(len(command)).encode() + b"\r\n"
@@ -568,7 +568,20 @@ def handle_client(connection):
                             connection.sendall(b"-ERR invalid latitude value\r\n")
                             break
                     if valid:
-                        connection.sendall(b":1\r\n")
+                        key = command[1]
+                        members = sorted_sets.setdefault(key, {})
+                        score_strings = sorted_set_score_strings.setdefault(key, {})
+                        added = 0
+                        for offset in range(2, len(command), 3):
+                            if offset + 2 >= len(command):
+                                break
+                            member = command[offset + 2]
+                            if member not in members:
+                                added += 1
+                            members[member] = 0.0
+                            score_strings[member] = b"0"
+                        key_versions[key] += 1
+                        connection.sendall(b":" + str(added).encode() + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
