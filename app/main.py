@@ -52,6 +52,23 @@ def geospatial_score(longitude, latitude):
     return score
 
 
+def geospatial_coordinates(score):
+    lon_min, lon_max = -180.0, 180.0
+    lat_min, lat_max = -85.05112878, 85.05112878
+    for bit in range(51, -1, -2):
+        midpoint = (lon_min + lon_max) / 2
+        if (score >> bit) & 1:
+            lon_min = midpoint
+        else:
+            lon_max = midpoint
+        midpoint = (lat_min + lat_max) / 2
+        if (score >> (bit - 1)) & 1:
+            lat_min = midpoint
+        else:
+            lat_max = midpoint
+    return (lon_min + lon_max) / 2, (lat_min + lat_max) / 2
+
+
 def parse_command(buffer):
     if not buffer.startswith(b"*"):
         line_end = buffer.find(b"\r\n")
@@ -580,7 +597,13 @@ def handle_client(connection):
                         if member not in members:
                             response += b"*-1\r\n"
                         else:
-                            response += b"*2\r\n$1\r\n0\r\n$1\r\n0\r\n"
+                            longitude, latitude = geospatial_coordinates(int(members[member]))
+                            longitude_text = repr(longitude).encode()
+                            latitude_text = repr(latitude).encode()
+                            response += (
+                                b"*2\r\n$" + str(len(longitude_text)).encode() + b"\r\n" + longitude_text +
+                                b"\r\n$" + str(len(latitude_text)).encode() + b"\r\n" + latitude_text + b"\r\n"
+                            )
                     connection.sendall(response)
                 elif command_name == b"GEOADD":
                     valid = True
