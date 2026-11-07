@@ -634,6 +634,35 @@ def handle_client(connection):
                                 distance *= 3.280839895013123
                         text = f"{distance:.4f}".encode()
                         connection.sendall(b"$" + str(len(text)).encode() + b"\r\n" + text + b"\r\n")
+                elif command_name == b"GEOSEARCH":
+                    members = sorted_sets.get(command[1], {})
+                    longitude = float(command[3])
+                    latitude = float(command[4])
+                    radius = float(command[6])
+                    unit = command[7].lower()
+                    if unit == b"km":
+                        radius *= 1000
+                    elif unit == b"mi":
+                        radius *= 1609.344
+                    elif unit == b"ft":
+                        radius /= 3.280839895013123
+                    results = []
+                    center_lat = math.radians(latitude)
+                    for member, score in members.items():
+                        member_lon, member_lat = geospatial_coordinates(int(score))
+                        delta_lat = math.radians(member_lat - latitude)
+                        delta_lon = math.radians(member_lon - longitude)
+                        haversine = (
+                            math.sin(delta_lat / 2) ** 2
+                            + math.cos(center_lat) * math.cos(math.radians(member_lat)) * math.sin(delta_lon / 2) ** 2
+                        )
+                        distance = 2 * 6372797.560856 * math.asin(math.sqrt(haversine))
+                        if distance <= radius:
+                            results.append(member)
+                    response = b"*" + str(len(results)).encode() + b"\r\n"
+                    for member in results:
+                        response += b"$" + str(len(member)).encode() + b"\r\n" + member + b"\r\n"
+                    connection.sendall(response)
                 elif command_name == b"GEOADD":
                     valid = True
                     for offset in range(2, len(command), 3):
