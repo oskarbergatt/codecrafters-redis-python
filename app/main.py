@@ -516,6 +516,10 @@ def handle_client(connection):
                     byte_index = offset // 8
                     bit = ((value[byte_index] >> (7 - offset % 8)) & 1) if byte_index < len(value) else 0
                     connection.sendall(b":" + str(bit).encode() + b"\r\n")
+                elif command_name == b"STRLEN":
+                    entry = store.get(command[1])
+                    value = entry[0] if entry else b""
+                    connection.sendall(b":" + str(len(value)).encode() + b"\r\n")
                 elif command_name == b"XADD":
                     key, entry_id = command[1], command[2]
                     if entry_id == b"*":
@@ -725,7 +729,9 @@ def main():
         replica_target = sys.argv[sys.argv.index("--replicaof") + 1].split()
     global server_role
     server_role = role
-    server_socket = socket.create_server(("localhost", port), reuse_port=True)
+    server_socket = socket.create_server(
+        ("localhost", port), reuse_port=(os.name != "nt")
+    )
     if replica_target:
         master_host, master_port = replica_target
         master_connection = socket.create_connection((master_host, int(master_port)))
