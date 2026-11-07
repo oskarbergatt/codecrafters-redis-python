@@ -243,7 +243,10 @@ def stream_id_tuple(value):
 
 def handle_client(connection):
     global auth_password, auth_hash
-    authenticated = True
+    # Connections are implicitly authenticated while the default user has no
+    # password. Once a password is configured, only AUTH can authenticate a
+    # newly opened connection.
+    authenticated = auth_password is None
     global master_repl_offset
     with connection:
         buffer = b""
@@ -257,6 +260,9 @@ def handle_client(connection):
                 command, consumed_bytes = parsed_command
                 buffer = buffer[consumed_bytes:]
                 command_name = command[0].upper()
+                if not authenticated and command_name not in (b"AUTH", b"QUIT"):
+                    connection.sendall(b"-NOAUTH Authentication required.\r\n")
+                    continue
                 if command_name == b"SUBSCRIBE":
                     for channel in command[1:]:
                         subscribed_channels.add(channel)
